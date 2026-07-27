@@ -36,6 +36,25 @@ def active_indices_from_index_pattern(
     )
 
 
+def active_indices_from_layout_pattern(
+    pattern: str, printed_indices: tuple[int, ...]
+) -> frozenset[int]:
+    """按显式的“打印位置到内部索引”排列解析 ``a/c`` 模式。"""
+    width = len(printed_indices)
+    if sorted(printed_indices) != list(range(width)):
+        raise ValueError("打印 layout 必须恰好包含全部内部索引")
+    compact = compact_pattern(pattern).lower()
+    if len(compact) != width or any(char not in "ac" for char in compact):
+        raise ValueError("输入模式长度或字符不合法")
+    return frozenset(
+        internal_index
+        for char, internal_index in zip(
+            compact, printed_indices, strict=True
+        )
+        if char == "a"
+    )
+
+
 def format_parity_pattern(
     results: Mapping[int, Parity],
     width: int,
@@ -69,6 +88,31 @@ def format_parity_index_pattern(
     compact = "".join(
         "-" if index not in results else symbols[results[index]]
         for index in range(width)
+    )
+    if group_size is None:
+        return compact
+    if group_size <= 0 or width % group_size:
+        raise ValueError("分组长度必须为状态宽度的正因数")
+    return ",".join(
+        compact[offset : offset + group_size]
+        for offset in range(0, width, group_size)
+    )
+
+
+def format_parity_layout_pattern(
+    results: Mapping[int, Parity],
+    printed_indices: tuple[int, ...],
+    *,
+    group_size: int | None = None,
+) -> str:
+    """按显式密码 layout 格式化三值输出模式。"""
+    width = len(printed_indices)
+    if sorted(printed_indices) != list(range(width)):
+        raise ValueError("打印 layout 必须恰好包含全部内部索引")
+    symbols = {Parity.ZERO: "b", Parity.ONE: "1", Parity.UNKNOWN: "?"}
+    compact = "".join(
+        "-" if index not in results else symbols[results[index]]
+        for index in printed_indices
     )
     if group_size is None:
         return compact

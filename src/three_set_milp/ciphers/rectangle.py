@@ -31,6 +31,13 @@ RECTANGLE = SPNParameters(
     permutation=_rectangle_source_permutation(),
 )
 
+# Table 5 依次打印 row0--row3，每行按 column15--column0。
+RECTANGLE_PAPER_PRINT_INDICES = tuple(
+    16 * row + column
+    for row in range(4)
+    for column in reversed(range(16))
+)
+
 
 def sub_column(value: int) -> int:
     """按列计算 RECTANGLE S 盒层，row 0 对应 S 盒最低位。"""

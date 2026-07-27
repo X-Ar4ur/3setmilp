@@ -1,6 +1,7 @@
 import pytest
 
 from experiments.reproduce_table5_spn import (
+    PAPER_LAYOUTS,
     PARAMETERS,
     load_config as load_table5_config,
     update_summary as update_table5_summary,
@@ -12,13 +13,15 @@ from experiments.reproduce_table6_lblock import (
 from three_set_milp.core.patterns import compact_pattern
 
 
-def _generic_results(expected: str) -> dict[str, dict[str, str]]:
+def _generic_results(
+    expected: str, layout: tuple[int, ...]
+) -> dict[str, dict[str, str]]:
     compact = compact_pattern(expected)
     return {
-        str(printed_index): {
+        str(internal_index): {
             "parity": "zero" if symbol == "b" else "unknown"
         }
-        for printed_index, symbol in enumerate(compact)
+        for internal_index, symbol in zip(layout, compact, strict=True)
     }
 
 
@@ -40,7 +43,12 @@ def _lblock_results(expected: str) -> dict[str, dict[str, str]]:
 @pytest.mark.parametrize("experiment", ["present60", "present63", "rectangle60"])
 def test_table5_expected_pattern_round_trip(experiment: str) -> None:
     config = load_table5_config(experiment)
-    payload = {"config": config, "results": _generic_results(config["expected_output"])}
+    payload = {
+        "config": config,
+        "results": _generic_results(
+            config["expected_output"], PAPER_LAYOUTS[config["cipher"]]
+        ),
+    }
     update_table5_summary(payload, PARAMETERS[config["cipher"]])
     assert payload["comparison"] == {"complete": True, "matches": True}
 

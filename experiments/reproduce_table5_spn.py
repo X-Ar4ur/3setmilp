@@ -9,21 +9,31 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from three_set_milp.ciphers.present import PRESENT
-from three_set_milp.ciphers.rectangle import RECTANGLE
+from three_set_milp.ciphers.present import (
+    PRESENT,
+    PRESENT_PAPER_PRINT_INDICES,
+)
+from three_set_milp.ciphers.rectangle import (
+    RECTANGLE,
+    RECTANGLE_PAPER_PRINT_INDICES,
+)
 from three_set_milp.ciphers.spn import SPNParameters
 from three_set_milp.core.bdpt import Parity
 from three_set_milp.core.oracle import theoretical_unknown_constant_cube_state
 from three_set_milp.core.patterns import (
-    active_indices_from_index_pattern,
+    active_indices_from_layout_pattern,
     compact_pattern,
-    format_parity_index_pattern,
+    format_parity_layout_pattern,
 )
 from three_set_milp.search.bdpt_search import CachedSuffixOracle, search_bdpt
 from three_set_milp.search.spn import SPNGurobiOracle, spn_search_parts
 
 
 PARAMETERS = {"present": PRESENT, "rectangle": RECTANGLE}
+PAPER_LAYOUTS = {
+    "present": PRESENT_PAPER_PRINT_INDICES,
+    "rectangle": RECTANGLE_PAPER_PRINT_INDICES,
+}
 EXPERIMENTS = ("present60", "present63", "rectangle60")
 
 
@@ -83,9 +93,10 @@ def update_summary(
         for index, result in payload["results"].items()
     }
     group_size = int(payload["config"]["group_size"])
-    pattern = format_parity_index_pattern(
+    layout = PAPER_LAYOUTS[str(payload["config"]["cipher"])]
+    pattern = format_parity_layout_pattern(
         parities,
-        parameters.block_size,
+        layout,
         group_size=group_size,
     )
     complete = "-" not in pattern
@@ -133,8 +144,9 @@ def main() -> int:
     if any(index < 0 or index >= parameters.block_size for index in targets):
         raise ValueError("目标位超出密码状态范围")
 
-    active = active_indices_from_index_pattern(
-        str(config["input_pattern"]), parameters.block_size
+    active = active_indices_from_layout_pattern(
+        str(config["input_pattern"]),
+        PAPER_LAYOUTS[str(config["cipher"])],
     )
     initial_state = theoretical_unknown_constant_cube_state(
         parameters.block_size, active

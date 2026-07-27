@@ -1,6 +1,13 @@
-from three_set_milp.ciphers.present import PRESENT, PRESENT_SBOX, p_layer, sbox_layer
+from three_set_milp.ciphers.present import (
+    PRESENT,
+    PRESENT_PAPER_PRINT_INDICES,
+    PRESENT_SBOX,
+    p_layer,
+    sbox_layer,
+)
 from three_set_milp.ciphers.rectangle import (
     RECTANGLE,
+    RECTANGLE_PAPER_PRINT_INDICES,
     RECTANGLE_SBOX,
     shift_row,
     sub_column,
@@ -55,3 +62,9 @@ def test_public_permutation_matches_concrete_helpers() -> None:
     assert propagate_public_permutation(rectangle_state, RECTANGLE).l == frozenset(
         {shift_row(value)}
     )
+
+
+def test_table5_cipher_layouts_are_explicit() -> None:
+    assert PRESENT_PAPER_PRINT_INDICES == tuple(reversed(range(64)))
+    assert RECTANGLE_PAPER_PRINT_INDICES[:16] == tuple(reversed(range(16)))
+    assert RECTANGLE_PAPER_PRINT_INDICES[16:32] == tuple(reversed(range(16, 32)))

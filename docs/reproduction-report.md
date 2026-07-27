@@ -39,7 +39,7 @@
 当前本地测试为：
 
 ```text
-68 passed, 10 skipped
+70 passed, 10 skipped
 ```
 
 10 个跳过项全部位于 `tests/milp/`，原因是当前 Python 环境不能使用有效的 Gurobi License。它们不是算法失败，也不能算作通过。
@@ -76,7 +76,9 @@ SIMON 约束 \(L_3\) 的右端 `1` 与论文自身的 XOR Model 2 矛盾，实�
 
 ## Table 5 首次冒烟结果说明
 
-首次服务器冒烟测试使用了旧脚本的高位到低位解析：PRESENT60 的内部目标 0 得到 `zero`，RECTANGLE60 的内部目标 63 得到 `unknown`。主论文 Table 5 实际按 \(x_0,\ldots,x_{63}\) 打印，因此这两次运行不能作为论文 balanced 位验收：RECTANGLE 的目标 63 本来就应为 unknown，正确的冒烟目标应为 0；PRESENT60 的正确冒烟目标应为 63。脚本现已修正位序，并通过配置版本阻止旧检查点与新结果混用。
+首次服务器运行中，PRESENT60 在正确的标准高位到低位 layout 下得到内部目标 0 为 `zero`，可记为一个 balanced 位冒烟通过；RECTANGLE60 的目标 63 得到 `unknown`，但该目标本来就在论文最后一组 unknown 中，不能作为 balanced 验收。
+
+第二次运行曾把两种 SPN 错误地统一为 \(x_0,\ldots,x_{63}\) 打印：PRESENT60 目标 63 得到 `unknown`，RECTANGLE60 目标 0 得到 `zero`。这两个结果使用了错误的输入常量位置，不能用于论文对照。最终实现改为逐密码显式 layout：PRESENT 使用 \(x_{63},\ldots,x_0\)；RECTANGLE 使用 row0--row3，每行 column15--column0。配置版本会阻止旧检查点与最终结果混用。
 
 LBlock63 的目标 32 在旧 S 盒 no-good 模型的首个后缀查询中长时间未返回。新版本改用数学上等价的扩展凸包公式：为合法 transition 引入连续凸组合权重，由输入/输出二进制变量保证最终只能选择合法的 0/1 transition。该公式约束更少且 LP 松弛更强，仍需服务器的 S 盒穷举测试和 LBlock 一轮交叉测试确认 Gurobi 实现。
 
