@@ -24,6 +24,18 @@ def active_indices_from_pattern(pattern: str, width: int) -> frozenset[int]:
     )
 
 
+def active_indices_from_index_pattern(
+    pattern: str, width: int
+) -> frozenset[int]:
+    """解析论文按 ``x0,x1,...`` 打印的 ``a/c`` 输入模式。"""
+    compact = compact_pattern(pattern).lower()
+    if len(compact) != width or any(char not in "ac" for char in compact):
+        raise ValueError("输入模式长度或字符不合法")
+    return frozenset(
+        index for index, char in enumerate(compact) if char == "a"
+    )
+
+
 def format_parity_pattern(
     results: Mapping[int, Parity],
     width: int,
@@ -35,6 +47,28 @@ def format_parity_pattern(
     compact = "".join(
         "-" if index not in results else symbols[results[index]]
         for index in reversed(range(width))
+    )
+    if group_size is None:
+        return compact
+    if group_size <= 0 or width % group_size:
+        raise ValueError("分组长度必须为状态宽度的正因数")
+    return ",".join(
+        compact[offset : offset + group_size]
+        for offset in range(0, width, group_size)
+    )
+
+
+def format_parity_index_pattern(
+    results: Mapping[int, Parity],
+    width: int,
+    *,
+    group_size: int | None = None,
+) -> str:
+    """按 ``x0,x1,...`` 顺序格式化三值输出模式。"""
+    symbols = {Parity.ZERO: "b", Parity.ONE: "1", Parity.UNKNOWN: "?"}
+    compact = "".join(
+        "-" if index not in results else symbols[results[index]]
+        for index in range(width)
     )
     if group_size is None:
         return compact

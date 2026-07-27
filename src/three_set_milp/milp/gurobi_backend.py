@@ -6,7 +6,7 @@ from typing import Any
 
 from three_set_milp.core.bitvector import validate_vector
 
-from .transitions import invalid_sbox_assignments
+from .transitions import valid_sbox_transitions
 
 
 class SolveStatus(str, Enum):
@@ -85,22 +85,52 @@ class GurobiModel:
         *,
         name: str = "sbox",
     ) -> None:
-        """用精确 no-good 约束排除全部非法 S-box transition。"""
+        """用扩展凸包公式精确描述全部合法 S-box transition。"""
         if not input_variables or not output_variables:
             raise ValueError("S-box 输入和输出变量不能为空")
-        variables = tuple(input_variables) + tuple(output_variables)
-        invalid = invalid_sbox_assignments(
+        input_width = len(input_variables)
+        output_width = len(output_variables)
+        transitions = tuple(sorted(valid_sbox_transitions(
             truth_table,
-            input_width=len(input_variables),
-            output_width=len(output_variables),
+            input_width=input_width,
+            output_width=output_width,
+        )))
+        weights = tuple(
+            self.model.addVar(
+                lb=0.0,
+                ub=1.0,
+                vtype=self._gp.GRB.CONTINUOUS,
+                name=f"{name}_lambda_{index}",
+            )
+            for index in range(len(transitions))
         )
-        for constraint_index, assignment in enumerate(invalid):
-            mismatch = self._gp.LinExpr()
-            for variable, bit in zip(variables, assignment, strict=True):
-                mismatch += variable if bit == 0 else 1 - variable
+        self.model.addConstr(
+            self._gp.quicksum(weights) == 1,
+            name=f"{name}_convex_sum",
+        )
+        for bit_index, variable in enumerate(input_variables):
             self.model.addConstr(
-                mismatch >= 1,
-                name=f"{name}_nogood_{constraint_index}",
+                variable
+                == self._gp.quicksum(
+                    weight
+                    for weight, (input_value, _) in zip(
+                        weights, transitions, strict=True
+                    )
+                    if input_value & (1 << bit_index)
+                ),
+                name=f"{name}_input_{bit_index}",
+            )
+        for bit_index, variable in enumerate(output_variables):
+            self.model.addConstr(
+                variable
+                == self._gp.quicksum(
+                    weight
+                    for weight, (_, output_value) in zip(
+                        weights, transitions, strict=True
+                    )
+                    if output_value & (1 << bit_index)
+                ),
+                name=f"{name}_output_{bit_index}",
             )
 
     def add_vector_fixer(

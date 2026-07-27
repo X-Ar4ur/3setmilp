@@ -15,7 +15,7 @@ from three_set_milp.core.patterns import compact_pattern
 def _generic_results(expected: str) -> dict[str, dict[str, str]]:
     compact = compact_pattern(expected)
     return {
-        str(63 - printed_index): {
+        str(printed_index): {
             "parity": "zero" if symbol == "b" else "unknown"
         }
         for printed_index, symbol in enumerate(compact)

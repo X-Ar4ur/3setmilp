@@ -2,8 +2,10 @@ import pytest
 
 from three_set_milp.core.bdpt import Parity
 from three_set_milp.core.patterns import (
+    active_indices_from_index_pattern,
     active_indices_from_pattern,
     compact_pattern,
+    format_parity_index_pattern,
     format_parity_pattern,
 )
 
@@ -16,6 +18,12 @@ def test_parity_pattern_format_and_grouping() -> None:
     results = {3: Parity.ZERO, 2: Parity.UNKNOWN, 1: Parity.ONE}
     assert format_parity_pattern(results, 4, group_size=2) == "b?,1-"
     assert compact_pattern("(b?, 1-)") == "b?1-"
+
+
+def test_index_order_pattern_uses_leftmost_as_index_zero() -> None:
+    assert active_indices_from_index_pattern("(ac,ca)", 4) == frozenset({0, 3})
+    results = {0: Parity.ZERO, 1: Parity.UNKNOWN, 2: Parity.ONE}
+    assert format_parity_index_pattern(results, 4, group_size=2) == "b?,1-"
 
 
 @pytest.mark.parametrize("pattern", ["aaa", "aacx", ""])

@@ -49,6 +49,16 @@ def valid_sbox_transitions(
     truth_table: Sequence[int], input_width: int, output_width: int
 ) -> frozenset[tuple[int, int]]:
     """枚举 S-box 的全部合法 CBDP transition。"""
+    return _cached_valid_sbox_transitions(
+        tuple(truth_table), input_width, output_width
+    )
+
+
+@lru_cache(maxsize=None)
+def _cached_valid_sbox_transitions(
+    truth_table: tuple[int, ...], input_width: int, output_width: int
+) -> frozenset[tuple[int, int]]:
+    """缓存固定 S 盒的合法 transition。"""
     monomial_anfs = output_monomial_anfs(
         truth_table,
         input_width=input_width,
@@ -80,7 +90,9 @@ def _cached_invalid_sbox_assignments(
     truth_table: tuple[int, ...], input_width: int, output_width: int
 ) -> tuple[tuple[int, ...], ...]:
     """缓存固定 S 盒的非法赋值，避免每个局部模型重复枚举。"""
-    valid = valid_sbox_transitions(truth_table, input_width, output_width)
+    valid = _cached_valid_sbox_transitions(
+        truth_table, input_width, output_width
+    )
     invalid: list[tuple[int, ...]] = []
     for assignment in product((0, 1), repeat=input_width + output_width):
         input_exponent = sum(

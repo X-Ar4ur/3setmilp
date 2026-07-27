@@ -39,7 +39,7 @@
 当前本地测试为：
 
 ```text
-67 passed, 10 skipped
+68 passed, 10 skipped
 ```
 
 10 个跳过项全部位于 `tests/milp/`，原因是当前 Python 环境不能使用有效的 Gurobi License。它们不是算法失败，也不能算作通过。
@@ -74,9 +74,15 @@ SIMON 约束 \(L_3\) 的右端 `1` 与论文自身的 XOR Model 2 矛盾，实�
 
 主论文的局部公式在同一个右半状态上逐 nibble 写入，同时又要求后续步骤读取旋转前的右半分量。实现没有按可能产生覆盖依赖的字面顺序编码，而是先完成公开的 8-bit 循环左移，再依次异或 8 个 keyed S 盒输出，最后交换两半。该电路与 LBlock 真实轮函数等价，且不会改变每轮 9 个搜索边界的数量。完整说明见 [lblock-model-note.md](lblock-model-note.md)。
 
+## Table 5 首次冒烟结果说明
+
+首次服务器冒烟测试使用了旧脚本的高位到低位解析：PRESENT60 的内部目标 0 得到 `zero`，RECTANGLE60 的内部目标 63 得到 `unknown`。主论文 Table 5 实际按 \(x_0,\ldots,x_{63}\) 打印，因此这两次运行不能作为论文 balanced 位验收：RECTANGLE 的目标 63 本来就应为 unknown，正确的冒烟目标应为 0；PRESENT60 的正确冒烟目标应为 63。脚本现已修正位序，并通过配置版本阻止旧检查点与新结果混用。
+
+LBlock63 的目标 32 在旧 S 盒 no-good 模型的首个后缀查询中长时间未返回。新版本改用数学上等价的扩展凸包公式：为合法 transition 引入连续凸组合权重，由输入/输出二进制变量保证最终只能选择合法的 0/1 transition。该公式约束更少且 LP 松弛更强，仍需服务器的 S 盒穷举测试和 LBlock 一轮交叉测试确认 Gurobi 实现。
+
 ## 性能实现说明
 
-- 固定 S 盒的非法 CBDP transition 已缓存；
+- 固定 S 盒的合法 CBDP transition 已缓存，并用精确扩展凸包公式建模；
 - 同一 Algorithm 2 边界内的后缀 MILP 会复用，仅修改输入/输出固定约束；
 - 边界推进后释放旧模型，避免为所有边界同时保留大模型；
 - 每个输出位写入一次 JSON 检查点，可安全断点续跑。

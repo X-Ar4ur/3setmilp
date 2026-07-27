@@ -103,6 +103,10 @@ def main() -> int:
         payload = json.loads(output.read_text(encoding="utf-8"))
         if payload.get("case") != args.experiment:
             raise ValueError("已有检查点的实验配置与当前命令不一致")
+        if payload.get("config") != config:
+            raise ValueError(
+                "已有检查点由旧配置生成，请移动旧文件或使用新的 --output 路径"
+            )
     else:
         payload = initial_payload(args.experiment, config)
 
@@ -126,6 +130,9 @@ def main() -> int:
                 output_flag=args.gurobi_log,
             )
         )
+        payload["running_target"] = target_index
+        write_checkpoint(output, payload)
+        print(f"开始目标位 {target_index}，正在执行首个后缀查询……", flush=True)
         started = time.perf_counter()
         result = search_bdpt(initial_state, target_index, parts, oracle)
         payload["results"][key] = {
@@ -136,6 +143,7 @@ def main() -> int:
             "cache_hits": oracle.cache_hits,
             "trace": [asdict(entry) for entry in result.trace],
         }
+        payload["running_target"] = None
         update_summary(payload)
         write_checkpoint(output, payload)
         print(

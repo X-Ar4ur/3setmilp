@@ -15,9 +15,9 @@ from three_set_milp.ciphers.spn import SPNParameters
 from three_set_milp.core.bdpt import Parity
 from three_set_milp.core.oracle import theoretical_unknown_constant_cube_state
 from three_set_milp.core.patterns import (
-    active_indices_from_pattern,
+    active_indices_from_index_pattern,
     compact_pattern,
-    format_parity_pattern,
+    format_parity_index_pattern,
 )
 from three_set_milp.search.bdpt_search import CachedSuffixOracle, search_bdpt
 from three_set_milp.search.spn import SPNGurobiOracle, spn_search_parts
@@ -83,7 +83,7 @@ def update_summary(
         for index, result in payload["results"].items()
     }
     group_size = int(payload["config"]["group_size"])
-    pattern = format_parity_pattern(
+    pattern = format_parity_index_pattern(
         parities,
         parameters.block_size,
         group_size=group_size,
@@ -118,6 +118,10 @@ def main() -> int:
         payload = json.loads(output.read_text(encoding="utf-8"))
         if payload.get("case") != args.experiment:
             raise ValueError("已有检查点的实验配置与当前命令不一致")
+        if payload.get("config") != config:
+            raise ValueError(
+                "已有检查点由旧配置生成，请移动旧文件或使用新的 --output 路径"
+            )
     else:
         payload = initial_payload(args.experiment, config, parameters)
 
@@ -129,7 +133,7 @@ def main() -> int:
     if any(index < 0 or index >= parameters.block_size for index in targets):
         raise ValueError("目标位超出密码状态范围")
 
-    active = active_indices_from_pattern(
+    active = active_indices_from_index_pattern(
         str(config["input_pattern"]), parameters.block_size
     )
     initial_state = theoretical_unknown_constant_cube_state(
@@ -150,6 +154,9 @@ def main() -> int:
                 output_flag=args.gurobi_log,
             )
         )
+        payload["running_target"] = target_index
+        write_checkpoint(output, payload)
+        print(f"开始目标位 {target_index}，正在执行首个后缀查询……", flush=True)
         started = time.perf_counter()
         result = search_bdpt(initial_state, target_index, parts, oracle)
         payload["results"][key] = {
@@ -160,6 +167,7 @@ def main() -> int:
             "cache_hits": oracle.cache_hits,
             "trace": [asdict(entry) for entry in result.trace],
         }
+        payload["running_target"] = None
         update_summary(payload, parameters)
         write_checkpoint(output, payload)
         print(

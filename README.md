@@ -57,6 +57,8 @@ python experiments/reproduce_table5_spn.py present63
 python experiments/reproduce_table5_spn.py rectangle60
 ```
 
+Table 5 按主论文的抽象向量顺序 `x0,...,x63` 解析和打印。若服务器上存在早期版本生成的 Table 5 检查点，请先改名保存；新脚本会拒绝混用旧位序结果。
+
 复现 Table 6 的 LBlock 实验：
 
 ```console
@@ -67,8 +69,8 @@ python experiments/reproduce_table6_lblock.py lblock62
 建议先各运行一个论文预期 balanced 的目标位作为服务器冒烟测试：
 
 ```console
-python experiments/reproduce_table5_spn.py present60 --targets 0
-python experiments/reproduce_table5_spn.py rectangle60 --targets 63
+python experiments/reproduce_table5_spn.py present60 --targets 63
+python experiments/reproduce_table5_spn.py rectangle60 --targets 0
 python experiments/reproduce_table6_lblock.py lblock63 --targets 32
 ```
 
