@@ -6,7 +6,7 @@ from typing import Any
 
 from three_set_milp.core.bitvector import validate_vector
 
-from .transitions import valid_sbox_transitions
+from .transitions import compact_sbox_inequalities, valid_sbox_transitions
 
 
 class SolveStatus(str, Enum):
@@ -85,11 +85,38 @@ class GurobiModel:
         *,
         name: str = "sbox",
     ) -> None:
-        """用扩展凸包公式精确描述全部合法 S-box transition。"""
+        """精确描述约化后的全部合法 S-box division trails。"""
         if not input_variables or not output_variables:
             raise ValueError("S-box 输入和输出变量不能为空")
         input_width = len(input_variables)
         output_width = len(output_variables)
+        inequalities = compact_sbox_inequalities(
+            truth_table,
+            input_width,
+            output_width,
+        )
+        if inequalities is not None:
+            # 附录不等式按 a3..a0,b3..b0 排列，变量对象则按
+            # a0..a3,b0..b3 排列。
+            ordered_variables = tuple(reversed(input_variables)) + tuple(
+                reversed(output_variables)
+            )
+            for index, row in enumerate(inequalities):
+                coefficients = row[:-1]
+                constant = row[-1]
+                expression = self._gp.quicksum(
+                    coefficient * variable
+                    for coefficient, variable in zip(
+                        coefficients, ordered_variables, strict=True
+                    )
+                )
+                self.model.addConstr(
+                    expression + constant >= 0,
+                    name=f"{name}_ineq_{index}",
+                )
+            return
+
+        # 其余 S 盒使用约化 trail 集的扩展凸包；二进制端点保证描述精确。
         transitions = tuple(sorted(valid_sbox_transitions(
             truth_table,
             input_width=input_width,

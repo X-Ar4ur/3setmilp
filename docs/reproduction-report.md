@@ -76,15 +76,18 @@ SIMON 约束 \(L_3\) 的右端 `1` 与论文自身的 XOR Model 2 矛盾，实�
 
 ## Table 5 首次冒烟结果说明
 
-首次服务器运行中，PRESENT60 在正确的标准高位到低位 layout 下得到内部目标 0 为 `zero`，可记为一个 balanced 位冒烟通过；RECTANGLE60 的目标 63 得到 `unknown`，但该目标本来就在论文最后一组 unknown 中，不能作为 balanced 验收。
+早期服务器运行中，PRESENT60 的内部目标 0 和 RECTANGLE60 的内部目标 0 均得到 `zero`，但继续计算发现 PRESENT60 的目标 4、8 与论文不符，因此这些结果整体作废，不能作为阶段验收。
 
-第二次运行曾把两种 SPN 错误地统一为 \(x_0,\ldots,x_{63}\) 打印：PRESENT60 目标 63 得到 `unknown`，RECTANGLE60 目标 0 得到 `zero`。这两个结果使用了错误的输入常量位置，不能用于论文对照。最终实现改为逐密码显式 layout：PRESENT 使用 \(x_{63},\ldots,x_0\)；RECTANGLE 使用 row0--row3，每行 column15--column0。配置版本会阻止旧检查点与最终结果混用。
+根因是 S 盒 MILP 把 CBDP Rule 5 产生的全部候选输出直接当作 division trails，遗漏了 `Reduce0`。以 PRESENT 为例，错误模型包含 190 条候选转移，而 Xiang 等人的原始论文附录 B 明确给出约化后应为 47 条。该过近似会制造虚假可达路径并漏报 balanced 位。修复后，PRESENT/RECTANGLE 的约化 trail 数分别为 47/49，并由穷举测试验证附录 C 的 11/17 条紧凑不等式与它们完全等价。
 
-LBlock63 的目标 32 在旧 S 盒 no-good 模型的首个后缀查询中长时间未返回。新版本改用数学上等价的扩展凸包公式：为合法 transition 引入连续凸组合权重，由输入/输出二进制变量保证最终只能选择合法的 0/1 transition。该公式约束更少且 LP 松弛更强，仍需服务器的 S 盒穷举测试和 LBlock 一轮交叉测试确认 Gurobi 实现。
+位序重新对照原始 CBDP 论文后确认无误：PRESENT 使用 \(x_{63},\ldots,x_0\)；RECTANGLE 使用 row0--row3，每行 column15--column0。配置中的模型版本会阻止旧检查点与修复后结果混用。
+
+LBlock63 的目标 32 在旧模型的首个后缀查询中长时间未返回。修复后的通用 S 盒扩展凸包只对约化后的 division trails 引入权重，不再对全部候选输出建模；仍需服务器的 S 盒穷举测试和 LBlock 一轮交叉测试确认性能与结果。
 
 ## 性能实现说明
 
-- 固定 S 盒的合法 CBDP transition 已缓存，并用精确扩展凸包公式建模；
+- 固定 S 盒只保留 `Reduce0` 后的合法 CBDP division trails；
+- PRESENT/RECTANGLE 使用原论文的 11/17 条紧凑不等式，其他 S 盒使用约化 trail 集的精确扩展凸包；
 - 同一 Algorithm 2 边界内的后缀 MILP 会复用，仅修改输入/输出固定约束；
 - 边界推进后释放旧模型，避免为所有边界同时保留大模型；
 - 每个输出位写入一次 JSON 检查点，可安全断点续跑。

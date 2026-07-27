@@ -1,6 +1,8 @@
 import unittest
 from itertools import product
 
+from three_set_milp.ciphers.present import PRESENT_SBOX
+from three_set_milp.ciphers.rectangle import RECTANGLE_SBOX
 from three_set_milp.core.bitvector import from_index_bits, to_index_bits
 from three_set_milp.milp.gurobi_backend import (
     GurobiModel,
@@ -10,11 +12,9 @@ from three_set_milp.milp.gurobi_backend import (
 from three_set_milp.milp.transitions import (
     and_transition_is_valid,
     copy_transition_is_valid,
-    sbox_transition_is_valid,
     valid_sbox_transitions,
     xor_transition_is_valid,
 )
-from three_set_milp.core.anf import output_monomial_anfs
 
 
 def _gurobi_is_usable() -> tuple[bool, str]:
@@ -66,7 +66,7 @@ class GurobiBackendTests(unittest.TestCase):
         for value in range(4):
             x0, x1 = to_index_bits(value, 2)
             truth_table.append(from_index_bits([x0, (x0 & x1) ^ x1]))
-        monomial_anfs = output_monomial_anfs(truth_table, 2, 2)
+        valid = valid_sbox_transitions(truth_table, 2, 2)
 
         for input_value, output_value in product(range(4), repeat=2):
             model = GurobiModel("sbox_test")
@@ -75,12 +75,34 @@ class GurobiBackendTests(unittest.TestCase):
             model.add_sbox(input_variables, output_variables, truth_table)
             model.fix_vector(input_variables, input_value)
             model.fix_vector(output_variables, output_value)
-            expected = sbox_transition_is_valid(
-                input_value, output_value, monomial_anfs
-            )
+            expected = (input_value, output_value) in valid
             self.assertEqual(model.solve() is SolveStatus.FEASIBLE, expected)
+
+    def test_compact_paper_sbox_assignments(self) -> None:
+        """用 Gurobi 穷举附录 C 的 PRESENT/RECTANGLE 紧凑模型。"""
+        for truth_table in (PRESENT_SBOX, RECTANGLE_SBOX):
+            valid = valid_sbox_transitions(truth_table, 4, 4)
+            model = GurobiModel("compact_sbox_test")
+            input_variables = model.add_binary_vector("a", 4)
+            output_variables = model.add_binary_vector("b", 4)
+            model.add_sbox(input_variables, output_variables, truth_table)
+            input_fixer = model.add_vector_fixer(
+                input_variables, name="input_fix"
+            )
+            output_fixer = model.add_vector_fixer(
+                output_variables, name="output_fix"
+            )
+            model.model.update()
+
+            for input_value, output_value in product(range(16), repeat=2):
+                model.set_vector_fixer(input_fixer, input_value)
+                model.set_vector_fixer(output_fixer, output_value)
+                expected = (input_value, output_value) in valid
+                self.assertEqual(
+                    model.solve() is SolveStatus.FEASIBLE,
+                    expected,
+                )
 
 
 if __name__ == "__main__":
     unittest.main()
-

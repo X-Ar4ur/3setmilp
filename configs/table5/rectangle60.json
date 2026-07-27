@@ -1,6 +1,7 @@
 {
   "cipher": "rectangle",
   "rounds": 9,
+  "model_version": "reduced_trails_compact_v2",
   "state_order": "row0_to_row3_column15_to_column0",
   "input_pattern": "caaaaaaaaaaaaaaa,caaaaaaaaaaaaaaa,caaaaaaaaaaaaaaa,caaaaaaaaaaaaaaa",
   "group_size": 16,
