@@ -26,8 +26,8 @@ PRESENT = SPNParameters(
     permutation=_present_source_permutation(),
 )
 
-# Table 5 沿用 PRESENT 规范的高位到低位状态打印顺序。
-PRESENT_PAPER_PRINT_INDICES = tuple(reversed(range(64)))
+# 主论文第 5.2 节将状态写为 (x0, ..., x63)，Table 5 沿用该顺序。
+PRESENT_PAPER_PRINT_INDICES = tuple(range(64))
 
 
 def sbox_layer(value: int) -> int:

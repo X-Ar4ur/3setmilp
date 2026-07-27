@@ -65,6 +65,6 @@ def test_public_permutation_matches_concrete_helpers() -> None:
 
 
 def test_table5_cipher_layouts_are_explicit() -> None:
-    assert PRESENT_PAPER_PRINT_INDICES == tuple(reversed(range(64)))
+    assert PRESENT_PAPER_PRINT_INDICES == tuple(range(64))
     assert RECTANGLE_PAPER_PRINT_INDICES[:16] == tuple(reversed(range(16)))
     assert RECTANGLE_PAPER_PRINT_INDICES[16:32] == tuple(reversed(range(16, 32)))

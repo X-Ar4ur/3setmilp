@@ -39,10 +39,10 @@
 当前本地测试为：
 
 ```text
-70 passed, 10 skipped
+73 passed, 11 skipped
 ```
 
-10 个跳过项全部位于 `tests/milp/`，原因是当前 Python 环境不能使用有效的 Gurobi License。它们不是算法失败，也不能算作通过。
+11 个跳过项全部位于 `tests/milp/`，原因是当前 Python 环境没有可用的 `gurobipy`。它们不是算法失败，也不能算作通过。
 
 ## 本地 Gurobi 环境
 
@@ -80,7 +80,7 @@ SIMON 约束 \(L_3\) 的右端 `1` 与论文自身的 XOR Model 2 矛盾，实�
 
 根因是 S 盒 MILP 把 CBDP Rule 5 产生的全部候选输出直接当作 division trails，遗漏了 `Reduce0`。以 PRESENT 为例，错误模型包含 190 条候选转移，而 Xiang 等人的原始论文附录 B 明确给出约化后应为 47 条。该过近似会制造虚假可达路径并漏报 balanced 位。修复后，PRESENT/RECTANGLE 的约化 trail 数分别为 47/49，并由穷举测试验证附录 C 的 11/17 条紧凑不等式与它们完全等价。
 
-位序重新对照原始 CBDP 论文后确认无误：PRESENT 使用 \(x_{63},\ldots,x_0\)；RECTANGLE 使用 row0--row3，每行 column15--column0。配置中的模型版本会阻止旧检查点与修复后结果混用。
+再次对照主论文第 5.2 节后发现，先前把 PRESENT Table 5 解释成 \(x_{63},\ldots,x_0\) 是错误的：正文明确把该状态列为 \((x_0,\ldots,x_{63})\)，并写明第 \(j\) 个 S 盒作用于 \((x_{4j},\ldots,x_{4j+3})\)。因此 PRESENT 的表格按 \(x_0,\ldots,x_{63}\) 解析，PRESENT60 的预期 balanced 内部位是 51、55、59、63；此前按 0、4、8、12 得到的结果不属于论文所列输入布局。RECTANGLE 仍使用 row0--row3、每行 column15--column0。配置差异会阻止旧检查点与修正后的结果混用。
 
 LBlock63 的目标 32 在旧模型的首个后缀查询中长时间未返回。修复后的通用 S 盒扩展凸包只对约化后的 division trails 引入权重，不再对全部候选输出建模；仍需服务器的 S 盒穷举测试和 LBlock 一轮交叉测试确认性能与结果。
 

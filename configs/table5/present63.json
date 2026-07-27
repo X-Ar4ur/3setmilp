@@ -2,7 +2,7 @@
   "cipher": "present",
   "rounds": 9,
   "model_version": "reduced_trails_compact_v2",
-  "state_order": "x63_to_x0",
+  "state_order": "x0_to_x63",
   "input_pattern": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac",
   "group_size": 32,
   "expected_output": "???b???b???bbbbb???b???b???bbbbb,???b???b???bbbbb???b???b???bbbbb"

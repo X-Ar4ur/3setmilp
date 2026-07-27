@@ -10,7 +10,10 @@ from experiments.reproduce_table6_lblock import (
     load_config as load_table6_config,
     update_summary as update_table6_summary,
 )
-from three_set_milp.core.patterns import compact_pattern
+from three_set_milp.core.patterns import (
+    active_indices_from_layout_pattern,
+    compact_pattern,
+)
 
 
 def _generic_results(
@@ -51,6 +54,25 @@ def test_table5_expected_pattern_round_trip(experiment: str) -> None:
     }
     update_table5_summary(payload, PARAMETERS[config["cipher"]])
     assert payload["comparison"] == {"complete": True, "matches": True}
+
+
+def test_present60_uses_the_paper_x0_to_x63_order() -> None:
+    config = load_table5_config("present60")
+    layout = PAPER_LAYOUTS["present"]
+    active = active_indices_from_layout_pattern(config["input_pattern"], layout)
+    balanced = {
+        internal_index
+        for internal_index, symbol in zip(
+            layout,
+            compact_pattern(config["expected_output"]),
+            strict=True,
+        )
+        if symbol == "b"
+    }
+
+    assert config["state_order"] == "x0_to_x63"
+    assert active == frozenset(range(60))
+    assert balanced == {51, 55, 59, 63}
 
 
 @pytest.mark.parametrize("experiment", ["lblock63", "lblock62"])
