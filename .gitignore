@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# 实验输出默认不纳入版本控制，仅保留目录说明或人工筛选后的结果。
+output/
+
+# PDF 文本抽取和页面渲染等临时文件。
+tmp/
