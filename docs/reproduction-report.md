@@ -23,7 +23,7 @@
 | SIMON 紧凑 L1--L4 方程 | 通过 | 稀疏分支枚举与局部精确传播比较，含部分轮 |
 | Gurobi 基本模型 | 待服务器 | 本机无可用 License |
 | SIMON 紧凑一轮模型 | 待服务器 | 已提供精确 BDPT 交叉测试 |
-| Table 3 | 待服务器 | 已提供运行脚本 |
+| Table 3 | 服务器通过 | Gurobi 13.0.2：目标位为 zero，Table 3 前缀规模一致 |
 | Table 4 SIMON32/SIMON64 | 待服务器 | 已提供逐目标位检查点脚本 |
 | PRESENT 位序/S 盒/P 层 | 通过 | 原始规范常数与全部 64 个基向量置换测试 |
 | RECTANGLE 位序/S 盒/ShiftRow | 通过 | 原始规范列布局与全部 64 个基向量行旋转测试 |
@@ -39,7 +39,7 @@
 当前本地测试为：
 
 ```text
-65 passed, 10 skipped
+67 passed, 10 skipped
 ```
 
 10 个跳过项全部位于 `tests/milp/`，原因是当前 Python 环境不能使用有效的 Gurobi License。它们不是算法失败，也不能算作通过。
@@ -52,6 +52,19 @@
 - 当前日期：2026-07-26。
 
 创建模型时 Gurobi 明确返回 `License expired 2026-06-10`。实现将该错误映射为异常，不会映射为 `INFEASIBLE`。
+
+## Table 3 服务器结果
+
+服务器环境为 Python 3.11.15、Linux 6.8 和 Gurobi 13.0.2。14 轮 SIMON32 的内部目标位 16 得到 `zero`，停止原因为 `l_empty`，共执行 198 次 oracle 查询，用时约 7.54 秒。
+
+观测到的轮边界规模为：
+
+```text
+K: 1, 0, 0, 0, 0, 0
+L: 1, 1, 1, 2, 2, 0
+```
+
+这与论文 Table 3 完全一致。首次结果文件中的 `table3_prefix.matches=false` 来自报告脚本漏记“在一轮内部剪空后”的输出边界零值，不是模型失败；汇总逻辑现已修复并加入回归测试。
 
 ## 已确认论文勘误
 

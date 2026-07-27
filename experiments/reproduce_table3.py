@@ -11,7 +11,11 @@ from typing import Any
 
 from three_set_milp.ciphers.simon import SIMON32, format_paper_state
 from three_set_milp.core.oracle import theoretical_unknown_constant_cube_state
-from three_set_milp.search.bdpt_search import CachedSuffixOracle, search_bdpt
+from three_set_milp.search.bdpt_search import (
+    CachedSuffixOracle,
+    StopReason,
+    search_bdpt,
+)
 from three_set_milp.search.simon import SimonGurobiOracle, simon_search_parts
 
 
@@ -67,6 +71,21 @@ def build_round_summary(initial_state: Any, result: Any) -> list[dict[str, int]]
                     "l": entry.l_survivors,
                 }
             )
+
+    # 若 L 在一轮内部被剪空，Algorithm 2 会立即停止，因而不会留下下一轮
+    # part 0 的 trace。论文 Table 3 把这个状态记在该轮输出边界，需显式补齐。
+    if result.reason is StopReason.L_EMPTY and result.trace:
+        boundary = result.trace[-1].boundary
+        terminal_round = (
+            boundary.round_index
+            if boundary.part_index == 0
+            else boundary.round_index + 1
+        )
+        terminal = {"round": terminal_round, "k": 0, "l": 0}
+        if summary[-1]["round"] == terminal_round:
+            summary[-1] = terminal
+        elif summary[-1]["round"] < terminal_round:
+            summary.append(terminal)
     return summary
 
 
@@ -154,4 +173,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
