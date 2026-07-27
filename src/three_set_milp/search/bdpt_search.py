@@ -14,6 +14,8 @@ class StopReason(str, Enum):
     K_REACHABLE = "k_reachable"
     L_EMPTY = "l_empty"
     FINAL_ONE = "final_one"
+    FINAL_ZERO = "final_zero"
+    FINAL_UNKNOWN = "final_unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +24,7 @@ class SearchPart:
 
     boundary: Hashable
     propagate: Callable[[BDPTState], BDPTState]
+    secret_key_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +39,7 @@ class TraceEntry:
     l_survivors: int
     k_after_propagation: int | None
     l_after_propagation: int | None
+    key_bypassed: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,9 +85,59 @@ def search_bdpt(
     if not parts:
         raise ValueError("BDPT 搜索至少需要一个局部函数")
 
+    return _search_bdpt(
+        initial_state,
+        target_index,
+        parts,
+        suffix_oracle,
+        enable_key_bypass=False,
+    )
+
+
+def search_k_bdpt(
+    initial_state: BDPTState,
+    target_index: int,
+    parts: Sequence[SearchPart],
+    suffix_oracle: SuffixOracle,
+) -> SearchResult:
+    """执行后续论文 Algorithm 1，在满足定理 3 时旁路轮密钥。"""
+    unit_vector(target_index, initial_state.width)
+    if not parts:
+        raise ValueError("K-BDPT 搜索至少需要一个局部函数")
+
+    return _search_bdpt(
+        initial_state,
+        target_index,
+        parts,
+        suffix_oracle,
+        enable_key_bypass=True,
+    )
+
+
+def _final_result(state: BDPTState, target_index: int) -> SearchResult:
+    """在全部局部函数传播完成后直接读取最终 BDPT。"""
+    parity = state.parity(unit_vector(target_index, state.width))
+    reasons = {
+        Parity.ZERO: StopReason.FINAL_ZERO,
+        Parity.ONE: StopReason.FINAL_ONE,
+        Parity.UNKNOWN: StopReason.FINAL_UNKNOWN,
+    }
+    return SearchResult(parity=parity, reason=reasons[parity], trace=())
+
+
+def _search_bdpt(
+    initial_state: BDPTState,
+    target_index: int,
+    parts: Sequence[SearchPart],
+    suffix_oracle: SuffixOracle,
+    *,
+    enable_key_bypass: bool,
+) -> SearchResult:
+    """共享主搜索循环；K-BDPT 的内层判定始终调用原始 BDPT。"""
+
     current = initial_state.normalized()
     trace: list[TraceEntry] = []
-    for part in parts:
+    for part_index, part in enumerate(parts):
         k_queries = 0
         for vector in sorted(current.k):
             k_queries += 1
@@ -136,7 +190,30 @@ def search_bdpt(
             width=current.width,
             l=frozenset(survivors),
         )
-        propagated = part.propagate(pruned)
+        key_bypassed: bool | None = None
+        if enable_key_bypass and part.secret_key_index is not None:
+            bit_mask = unit_vector(part.secret_key_index, current.width)
+            shifted_l = frozenset(
+                vector | bit_mask
+                for vector in pruned.l
+                if vector & bit_mask == 0
+            )
+            bypass_input = BDPTState(width=current.width, l=shifted_l)
+            remaining_parts = parts[part_index + 1 :]
+            if remaining_parts:
+                bypass_result = _search_bdpt(
+                    bypass_input,
+                    target_index,
+                    remaining_parts,
+                    suffix_oracle,
+                    enable_key_bypass=False,
+                )
+            else:
+                bypass_result = _final_result(bypass_input, target_index)
+            key_bypassed = bypass_result.parity is Parity.ZERO
+            propagated = pruned if key_bypassed else part.propagate(pruned)
+        else:
+            propagated = part.propagate(pruned)
         if propagated.width != current.width:
             raise ValueError("局部函数传播改变了密码状态宽度")
         trace.append(
@@ -149,13 +226,14 @@ def search_bdpt(
                 l_survivors=len(survivors),
                 k_after_propagation=len(propagated.k),
                 l_after_propagation=len(propagated.l),
+                key_bypassed=key_bypassed,
             )
         )
         current = propagated
 
+    final = _final_result(current, target_index)
     return SearchResult(
-        parity=Parity.ONE,
-        reason=StopReason.FINAL_ONE,
+        parity=final.parity,
+        reason=final.reason,
         trace=tuple(trace),
     )
-

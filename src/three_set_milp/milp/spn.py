@@ -19,8 +19,10 @@ class SPNBoundary:
     def validate(self, parameters: SPNParameters, rounds: int) -> None:
         if rounds <= 0:
             raise ValueError("轮数必须为正数")
-        if self.round_index < 0 or self.round_index >= rounds:
+        if self.round_index < 0 or self.round_index > rounds:
             raise ValueError("起始轮超出目标密码轮数")
+        if self.round_index == rounds and self.part_index != 0:
+            raise ValueError("最终输出边界的局部函数编号必须为 0")
         if self.part_index < 0 or self.part_index > len(parameters.sbox_groups):
             raise ValueError("SPN 局部函数编号超出范围")
 

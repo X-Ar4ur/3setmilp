@@ -56,7 +56,7 @@ def test_table5_expected_pattern_round_trip(experiment: str) -> None:
     assert payload["comparison"] == {"complete": True, "matches": True}
 
 
-def test_present60_uses_the_paper_x0_to_x63_order() -> None:
+def test_present60_uses_the_specification_x63_to_x0_order() -> None:
     config = load_table5_config("present60")
     layout = PAPER_LAYOUTS["present"]
     active = active_indices_from_layout_pattern(config["input_pattern"], layout)
@@ -70,9 +70,9 @@ def test_present60_uses_the_paper_x0_to_x63_order() -> None:
         if symbol == "b"
     }
 
-    assert config["state_order"] == "x0_to_x63"
-    assert active == frozenset(range(60))
-    assert balanced == {51, 55, 59, 63}
+    assert config["state_order"] == "x63_to_x0"
+    assert active == frozenset(range(4, 64))
+    assert balanced == {0, 4, 8, 12}
 
 
 @pytest.mark.parametrize("experiment", ["lblock63", "lblock62"])

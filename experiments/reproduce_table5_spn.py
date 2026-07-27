@@ -25,8 +25,16 @@ from three_set_milp.core.patterns import (
     compact_pattern,
     format_parity_layout_pattern,
 )
-from three_set_milp.search.bdpt_search import CachedSuffixOracle, search_bdpt
-from three_set_milp.search.spn import SPNGurobiOracle, spn_search_parts
+from three_set_milp.search.bdpt_search import (
+    CachedSuffixOracle,
+    search_bdpt,
+    search_k_bdpt,
+)
+from three_set_milp.search.spn import (
+    SPNGurobiOracle,
+    spn_k_bdpt_parts,
+    spn_search_parts,
+)
 
 
 PARAMETERS = {"present": PRESENT, "rectangle": RECTANGLE}
@@ -54,6 +62,12 @@ def parse_args() -> argparse.Namespace:
         help="单次 MILP 查询秒数上限；未确定状态会终止",
     )
     parser.add_argument("--gurobi-log", action="store_true")
+    parser.add_argument(
+        "--algorithm",
+        choices=("bdpt", "k-bdpt"),
+        default="bdpt",
+        help="主论文 Algorithm 2，或后续论文的密钥旁路 K-BDPT",
+    )
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args()
 
@@ -67,12 +81,14 @@ def initial_payload(
     experiment: str,
     config: dict[str, Any],
     parameters: SPNParameters,
+    algorithm: str,
 ) -> dict[str, Any]:
     import gurobipy as gp
 
     return {
         "experiment": "paper_table5_spn",
         "case": experiment,
+        "algorithm": algorithm,
         "environment": {
             "python": sys.version,
             "platform": platform.platform(),
@@ -122,19 +138,24 @@ def main() -> int:
     config = load_config(args.experiment)
     parameters = PARAMETERS[str(config["cipher"])]
     rounds = int(config["rounds"])
+    algorithm_suffix = "" if args.algorithm == "bdpt" else "_k_bdpt"
     output = args.output or Path(
-        f"output/results/table5_{args.experiment}.json"
+        f"output/results/table5_{args.experiment}{algorithm_suffix}.json"
     )
     if output.exists():
         payload = json.loads(output.read_text(encoding="utf-8"))
         if payload.get("case") != args.experiment:
             raise ValueError("已有检查点的实验配置与当前命令不一致")
+        if payload.get("algorithm", "bdpt") != args.algorithm:
+            raise ValueError("已有检查点的搜索算法与当前命令不一致")
         if payload.get("config") != config:
             raise ValueError(
                 "已有检查点由旧配置生成，请移动旧文件或使用新的 --output 路径"
             )
     else:
-        payload = initial_payload(args.experiment, config, parameters)
+        payload = initial_payload(
+            args.experiment, config, parameters, args.algorithm
+        )
 
     targets = (
         list(range(parameters.block_size))
@@ -151,7 +172,12 @@ def main() -> int:
     initial_state = theoretical_unknown_constant_cube_state(
         parameters.block_size, active
     )
-    parts = spn_search_parts(parameters, rounds)
+    if args.algorithm == "k-bdpt":
+        parts = spn_k_bdpt_parts(parameters, rounds)
+        search = search_k_bdpt
+    else:
+        parts = spn_search_parts(parameters, rounds)
+        search = search_bdpt
 
     for target_index in targets:
         key = str(target_index)
@@ -170,7 +196,7 @@ def main() -> int:
         write_checkpoint(output, payload)
         print(f"开始目标位 {target_index}，正在执行首个后缀查询……", flush=True)
         started = time.perf_counter()
-        result = search_bdpt(initial_state, target_index, parts, oracle)
+        result = search(initial_state, target_index, parts, oracle)
         payload["results"][key] = {
             "parity": result.parity.value,
             "reason": result.reason.value,

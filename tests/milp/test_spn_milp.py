@@ -41,3 +41,12 @@ def test_reusable_spn_model_matches_exact_one_sbox(input_vector: int) -> None:
         assert (status is SolveStatus.FEASIBLE) == (
             expected.parity(1 << target_index) is Parity.UNKNOWN
         )
+
+
+def test_terminal_spn_boundary_is_identity() -> None:
+    _require_gurobi()
+    suffix = SPNSuffixModel(TINY_SPN, 1, SPNBoundary(1, 0))
+
+    for target_index in range(4):
+        status = suffix.check_trail(1 << target_index, target_index)
+        assert status is SolveStatus.FEASIBLE

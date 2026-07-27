@@ -57,7 +57,13 @@ python experiments/reproduce_table5_spn.py present63
 python experiments/reproduce_table5_spn.py rectangle60
 ```
 
-Table 5 使用逐密码显式 layout：PRESENT 按主论文第 5.2 节的 `x0,...,x63`，RECTANGLE 按 row0--row3 且每行 column15--column0。PRESENT/RECTANGLE 的 CBDP S 盒分别使用原论文附录的 11/17 条紧凑不等式。若服务器上存在早期版本生成的 Table 5 检查点，请先改名保存；新脚本会拒绝混用旧位序或未约化 S 盒结果。
+Table 5 使用逐密码显式 layout：PRESENT 按规范的 `x63,...,x0`，RECTANGLE 按 row0--row3 且每行 column15--column0。PRESENT/RECTANGLE 的 CBDP S 盒分别使用原论文附录的 11/17 条紧凑不等式。若服务器上存在早期版本生成的 Table 5 检查点，请先改名保存；新脚本会拒绝混用旧位序、搜索算法或未约化 S 盒结果。
+
+Table 5 脚本默认执行主论文 Algorithm 2。`--algorithm k-bdpt` 执行后续论文 *Exploring Secret Keys in Searching Integral Distinguishers Based on Division Property* 的 Algorithm 1，将每个轮密钥比特拆开，并仅在其定理 3 的检查返回 zero 时旁路该密钥比特：
+
+```console
+python experiments/reproduce_table5_spn.py present60 --algorithm k-bdpt
+```
 
 复现 Table 6 的 LBlock 实验：
 
@@ -69,7 +75,7 @@ python experiments/reproduce_table6_lblock.py lblock62
 建议先各运行一个论文预期 balanced 的目标位作为服务器冒烟测试：
 
 ```console
-python experiments/reproduce_table5_spn.py present60 --targets 63
+python experiments/reproduce_table5_spn.py present60 --algorithm k-bdpt --targets 4
 python experiments/reproduce_table5_spn.py rectangle60 --targets 0
 python experiments/reproduce_table6_lblock.py lblock63 --targets 32
 ```

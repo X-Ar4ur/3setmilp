@@ -97,7 +97,7 @@ SIMON 状态已经依据主论文第 413--415 页的公式和 \(Q_{1,15}\) 示�
 
 局部函数公式中的 \((x_0,\ldots,x_{63})\) 是坐标列举，不能直接推断 Table 5 字符串的显示方向。结合各密码规范的状态布局，实验使用：
 
-- PRESENT：按主论文第 5.2 节列出的 \(x_0,\ldots,x_{63}\) 打印；PRESENT60 的四个预期 balanced 位为内部索引 51、55、59、63；
+- PRESENT：规范明确规定 bit 0 位于分组最右侧，因此 Table 5 按 \(x_{63},\ldots,x_0\) 打印；PRESENT60 的四个预期 balanced 位为内部索引 12、8、4、0；
 - RECTANGLE：依次打印 row0、row1、row2、row3，每行按 column15 到 column0；第一个预期 balanced 分量对应内部索引 15，第一组最后一个分量对应内部索引 0；
 - SIMON：按左右字高位到低位打印；
 - LBlock：按 \((x_{31},\ldots,x_0,y_{31},\ldots,y_0)\) 打印。
