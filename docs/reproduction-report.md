@@ -82,9 +82,11 @@ SIMON 约束 \(L_3\) 的右端 `1` 与论文自身的 XOR Model 2 矛盾，实�
 
 PRESENT 原始规范明确规定 bit 0 位于分组最右侧，状态写为 \(b_{63}\cdots b_0\)，每个 nibble 为 \(b_{4i+3}\|b_{4i+2}\|b_{4i+1}\|b_{4i}\)。因此 Table 5 按 \(x_{63},\ldots,x_0\) 解析，PRESENT60 的预期 balanced 内部位是 0、4、8、12。曾尝试的 \(x_0,\ldots,x_{63}\) 配置在初始边界第一次 K 查询就返回 unknown，已证实不是论文实验的布局并予以撤回。
 
-正确布局下，主论文 Algorithm 2 对目标 0 返回 zero，但目标 4、8、12 在轮密钥 Rule 4 产生 K 后返回 unknown，与 Table 5 不符。后续论文明确指出旧 Rule 4 会因无法利用 unknown 项之间的抵消而损失精度，并给出 K-BDPT Algorithm 1。当前实现保留默认 `bdpt` 模式以忠实检查主论文伪代码，同时增加 `--algorithm k-bdpt` 模式，逐密钥比特执行后续论文定理 3 的条件旁路；是否能得到 Table 5 的四个 balanced 位仍待服务器验证。
+正确布局下，主论文 Algorithm 2 对目标 0 返回 zero，但目标 4、8、12 在轮密钥 Rule 4 产生 K 后返回 unknown，与 Table 5 不符。K-BDPT 对目标 4 的服务器实验同样返回 unknown，耗时约 845 秒、调用 oracle 7276 次；该路线现已暂停，不能用来替代对主论文的核验。
 
-搜索循环另有一个终点修复：传播完最后一个局部函数后必须读取最终 BDPT，而不能无条件返回 one。该行为已经由后续论文 Example 2 的抵消案例覆盖。
+现已逐页检查主论文的全部 30 页，并把 Algorithm 2、PRESENT 的 17 部件轮划分、S 盒定理和停止规则逐项映射到实现。发现并修正了一处确定偏差：主论文第 412 页 Algorithm 2 第 22 行规定遍历全部部件后返回 one，主论文模式现严格遵守该终点规则。这不影响目标 4 在第二轮提前触发的 Stopping Rule 1。
+
+为判断该提前停止究竟来自实现错误还是论文方法本身，Table 5 脚本新增 `--record-witness`：它会导出决定性 K 向量到目标单位向量的完整 CBDP trail，并使用独立代码逐个检查 47 条 PRESENT S 盒合法 transition 和位排列。只有该证据完成核验后，才会决定是否需要参考后续工作。详细审计见 `docs/main-paper-audit.md`。
 
 LBlock63 的目标 32 在旧模型的首个后缀查询中长时间未返回。修复后的通用 S 盒扩展凸包只对约化后的 division trails 引入权重，不再对全部候选输出建模；仍需服务器的 S 盒穷举测试和 LBlock 一轮交叉测试确认性能与结果。
 

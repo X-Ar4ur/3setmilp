@@ -25,8 +25,16 @@ from three_set_milp.core.patterns import (
     compact_pattern,
     format_parity_layout_pattern,
 )
+from three_set_milp.milp.gurobi_backend import SolveStatus
+from three_set_milp.milp.spn import (
+    SPNBoundary,
+    SPNSuffixModel,
+    validate_spn_witness,
+)
 from three_set_milp.search.bdpt_search import (
     CachedSuffixOracle,
+    SearchResult,
+    StopReason,
     search_bdpt,
     search_k_bdpt,
 )
@@ -62,6 +70,11 @@ def parse_args() -> argparse.Namespace:
         help="单次 MILP 查询秒数上限；未确定状态会终止",
     )
     parser.add_argument("--gurobi-log", action="store_true")
+    parser.add_argument(
+        "--record-witness",
+        action="store_true",
+        help="对 Stopping Rule 1 的决定性 K 向量记录并独立核验 CBDP 轨迹",
+    )
     parser.add_argument(
         "--algorithm",
         choices=("bdpt", "k-bdpt"),
@@ -131,6 +144,65 @@ def write_checkpoint(path: Path, payload: dict[str, Any]) -> None:
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+def build_decisive_witness(
+    parameters: SPNParameters,
+    rounds: int,
+    result: SearchResult,
+    target_index: int,
+    *,
+    time_limit: float | None,
+    output_flag: bool,
+) -> dict[str, Any] | None:
+    """为 Stopping Rule 1 的可行结论重新求解并导出可审计轨迹。"""
+    if result.reason is not StopReason.K_REACHABLE:
+        return None
+    decisive = result.trace[-1]
+    if not isinstance(decisive.boundary, SPNBoundary):
+        raise TypeError("决定性轨迹不是 SPN 边界")
+    if decisive.decisive_vector is None:
+        raise RuntimeError("Stopping Rule 1 缺少决定性 K 向量")
+
+    model = SPNSuffixModel(
+        parameters,
+        rounds,
+        decisive.boundary,
+        output_flag=output_flag,
+    )
+    status = model.check_trail(
+        decisive.decisive_vector,
+        target_index,
+        time_limit=time_limit,
+    )
+    if status is not SolveStatus.FEASIBLE:
+        raise RuntimeError("重新求解决定性 K 向量时没有得到可行轨迹")
+    steps = model.trail_witness()
+    validate_spn_witness(
+        parameters,
+        rounds,
+        decisive.boundary,
+        decisive.decisive_vector,
+        target_index,
+        steps,
+    )
+    hex_width = (parameters.block_size + 3) // 4
+    return {
+        "verified": True,
+        "boundary": asdict(decisive.boundary),
+        "input_vector": decisive.decisive_vector,
+        "input_hex": f"{decisive.decisive_vector:0{hex_width}x}",
+        "target_index": target_index,
+        "steps": [
+            {
+                "boundary": asdict(step.boundary),
+                "state": step.state,
+                "state_hex": f"{step.state:0{hex_width}x}",
+                "hamming_weight": step.state.bit_count(),
+            }
+            for step in steps
+        ],
+    }
 
 
 def main() -> int:
@@ -205,6 +277,17 @@ def main() -> int:
             "cache_hits": oracle.cache_hits,
             "trace": [asdict(entry) for entry in result.trace],
         }
+        if args.record_witness:
+            payload["results"][key]["decisive_cbdp_witness"] = (
+                build_decisive_witness(
+                    parameters,
+                    rounds,
+                    result,
+                    target_index,
+                    time_limit=args.time_limit,
+                    output_flag=args.gurobi_log,
+                )
+            )
         payload["running_target"] = None
         update_summary(payload, parameters)
         write_checkpoint(output, payload)

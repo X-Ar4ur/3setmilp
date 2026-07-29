@@ -28,6 +28,7 @@ def test_stopping_rule_1_returns_unknown() -> None:
 
     assert result.parity is Parity.UNKNOWN
     assert result.reason is StopReason.K_REACHABLE
+    assert result.trace[-1].decisive_vector == 0b11
 
 
 def test_stopping_rule_2_returns_zero() -> None:
@@ -49,7 +50,7 @@ def test_full_propagation_returns_one() -> None:
     assert len(result.trace) == 2
 
 
-def test_final_state_is_checked_after_last_propagation() -> None:
+def test_algorithm_2_returns_one_after_last_propagation() -> None:
     initial = BDPTState(width=2, l=frozenset({0b01}))
 
     def cancel_last_vector(state: BDPTState) -> BDPTState:
@@ -58,8 +59,8 @@ def test_final_state_is_checked_after_last_propagation() -> None:
     part = SearchPart(Boundary(0), cancel_last_vector)
     result = search_bdpt(initial, 0, [part], lambda boundary, vector, target: True)
 
-    assert result.parity is Parity.ZERO
-    assert result.reason is StopReason.FINAL_ZERO
+    assert result.parity is Parity.ONE
+    assert result.reason is StopReason.FINAL_ONE
 
 
 def test_k_bdpt_reproduces_followup_paper_example_2() -> None:

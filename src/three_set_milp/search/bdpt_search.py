@@ -40,6 +40,7 @@ class TraceEntry:
     k_after_propagation: int | None
     l_after_propagation: int | None
     key_bypassed: bool | None = None
+    decisive_vector: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +92,7 @@ def search_bdpt(
         parts,
         suffix_oracle,
         enable_key_bypass=False,
+        check_final_state=False,
     )
 
 
@@ -111,12 +113,31 @@ def search_k_bdpt(
         parts,
         suffix_oracle,
         enable_key_bypass=True,
+        check_final_state=True,
     )
 
 
 def _final_result(state: BDPTState, target_index: int) -> SearchResult:
-    """在全部局部函数传播完成后直接读取最终 BDPT。"""
-    parity = state.parity(unit_vector(target_index, state.width))
+    """执行主论文 Algorithm 2 第 22 行的终点规则。"""
+    unit_vector(target_index, state.width)
+    return SearchResult(
+        parity=Parity.ONE,
+        reason=StopReason.FINAL_ONE,
+        trace=(),
+    )
+
+
+def _final_state_parity(state: BDPTState, target_index: int) -> Parity:
+    """仅供 K-BDPT 旁路子问题读取已经位于输出端的状态。"""
+    return state.parity(unit_vector(target_index, state.width))
+
+
+def _final_state_result(
+    state: BDPTState,
+    target_index: int,
+) -> SearchResult:
+    """读取最终 BDPT；用于后续论文算法的内部旁路子问题。"""
+    parity = _final_state_parity(state, target_index)
     reasons = {
         Parity.ZERO: StopReason.FINAL_ZERO,
         Parity.ONE: StopReason.FINAL_ONE,
@@ -132,6 +153,7 @@ def _search_bdpt(
     suffix_oracle: SuffixOracle,
     *,
     enable_key_bypass: bool,
+    check_final_state: bool,
 ) -> SearchResult:
     """共享主搜索循环；K-BDPT 的内层判定始终调用原始 BDPT。"""
 
@@ -152,6 +174,7 @@ def _search_bdpt(
                         l_survivors=0,
                         k_after_propagation=None,
                         l_after_propagation=None,
+                        decisive_vector=vector,
                     )
                 )
                 return SearchResult(
@@ -207,10 +230,15 @@ def _search_bdpt(
                     remaining_parts,
                     suffix_oracle,
                     enable_key_bypass=False,
+                    check_final_state=True,
                 )
+                bypass_parity = bypass_result.parity
             else:
-                bypass_result = _final_result(bypass_input, target_index)
-            key_bypassed = bypass_result.parity is Parity.ZERO
+                bypass_parity = _final_state_parity(
+                    bypass_input,
+                    target_index,
+                )
+            key_bypassed = bypass_parity is Parity.ZERO
             propagated = pruned if key_bypassed else part.propagate(pruned)
         else:
             propagated = part.propagate(pruned)
@@ -231,7 +259,11 @@ def _search_bdpt(
         )
         current = propagated
 
-    final = _final_result(current, target_index)
+    final = (
+        _final_state_result(current, target_index)
+        if check_final_state
+        else _final_result(current, target_index)
+    )
     return SearchResult(
         parity=final.parity,
         reason=final.reason,

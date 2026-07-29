@@ -1,7 +1,7 @@
 {
   "cipher": "present",
   "rounds": 9,
-  "model_version": "reduced_trails_compact_v2",
+  "model_version": "paper_algorithm2_audit_v3",
   "state_order": "x63_to_x0",
   "input_pattern": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac",
   "group_size": 32,

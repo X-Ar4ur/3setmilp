@@ -3,7 +3,12 @@ import pytest
 from three_set_milp.ciphers.spn import SPNParameters, propagate_sbox_part
 from three_set_milp.core.bdpt import BDPTState, Parity
 from three_set_milp.milp import GurobiModel, GurobiUnavailableError, SolveStatus
-from three_set_milp.milp.spn import SPNBoundary, SPNSuffixModel
+from three_set_milp.milp.spn import (
+    SPNBoundary,
+    SPNSuffixModel,
+    SPNWitnessStep,
+    validate_spn_witness,
+)
 
 
 TINY_SPN = SPNParameters(
@@ -50,3 +55,38 @@ def test_terminal_spn_boundary_is_identity() -> None:
     for target_index in range(4):
         status = suffix.check_trail(1 << target_index, target_index)
         assert status is SolveStatus.FEASIBLE
+
+
+def test_spn_witness_can_be_verified_without_gurobi() -> None:
+    steps = (
+        SPNWitnessStep(SPNBoundary(0, 0), 0b0001),
+        SPNWitnessStep(SPNBoundary(0, 1), 0b0001),
+        SPNWitnessStep(SPNBoundary(1, 0), 0b0001),
+    )
+
+    validate_spn_witness(
+        TINY_SPN,
+        rounds=1,
+        boundary=SPNBoundary(0, 0),
+        input_vector=0b0001,
+        target_index=0,
+        steps=steps,
+    )
+
+
+def test_spn_witness_rejects_invalid_sbox_transition() -> None:
+    steps = (
+        SPNWitnessStep(SPNBoundary(0, 0), 0b0001),
+        SPNWitnessStep(SPNBoundary(0, 1), 0b1111),
+        SPNWitnessStep(SPNBoundary(1, 0), 0b1000),
+    )
+
+    with pytest.raises(ValueError, match="非法 S 盒"):
+        validate_spn_witness(
+            TINY_SPN,
+            rounds=1,
+            boundary=SPNBoundary(0, 0),
+            input_vector=0b0001,
+            target_index=3,
+            steps=steps,
+        )
