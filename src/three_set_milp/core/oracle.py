@@ -143,6 +143,43 @@ def theoretical_unknown_constant_cube_state(
     ).normalized()
 
 
+def theoretical_known_constant_cube_state(
+    width: int,
+    active_indices: Iterable[int],
+    constants: Mapping[int, int],
+) -> BDPTState:
+    """按后续论文的已知常量公式构造精确初始 BDPT。"""
+    validate_width(width)
+    active = frozenset(active_indices)
+    for index in active:
+        unit_vector(index, width)
+
+    constant_indices = set(constants)
+    if active & constant_indices:
+        raise ValueError("活动位不能同时指定为常量")
+    if active | constant_indices != set(range(width)):
+        raise ValueError("常量映射必须覆盖所有非活动位")
+
+    one_mask = 0
+    for index, bit in constants.items():
+        unit_vector(index, width)
+        if bit not in (0, 1) or isinstance(bit, bool):
+            raise ValueError("常量位只能取整数 0 或 1")
+        if bit == 1:
+            one_mask |= unit_vector(index, width)
+
+    active_mask = sum(unit_vector(index, width) for index in active)
+    l_vectors: set[int] = set()
+    subset = one_mask
+    while True:
+        l_vectors.add(active_mask | subset)
+        if subset == 0:
+            break
+        subset = (subset - 1) & one_mask
+
+    return BDPTState(width=width, l=frozenset(l_vectors)).normalized()
+
+
 def state_matches_family(
     state: BDPTState, multisets: Sequence[Sequence[int]]
 ) -> bool:

@@ -19,10 +19,14 @@ from three_set_milp.ciphers.rectangle import (
 )
 from three_set_milp.ciphers.spn import SPNParameters
 from three_set_milp.core.bdpt import Parity
-from three_set_milp.core.oracle import theoretical_unknown_constant_cube_state
+from three_set_milp.core.oracle import (
+    theoretical_known_constant_cube_state,
+    theoretical_unknown_constant_cube_state,
+)
 from three_set_milp.core.patterns import (
     active_indices_from_layout_pattern,
     compact_pattern,
+    constant_values_from_layout_pattern,
     format_parity_layout_pattern,
 )
 from three_set_milp.milp.gurobi_backend import SolveStatus
@@ -37,6 +41,7 @@ from three_set_milp.search.bdpt_search import (
     StopReason,
     search_bdpt,
     search_k_bdpt,
+    search_k_bdpt_literal,
 )
 from three_set_milp.search.spn import (
     SPNGurobiOracle,
@@ -51,6 +56,11 @@ PAPER_LAYOUTS = {
     "rectangle": RECTANGLE_PAPER_PRINT_INDICES,
 }
 EXPERIMENTS = ("present60", "present63", "rectangle60")
+ALGORITHM_VERSIONS = {
+    "bdpt": None,
+    "k-bdpt": "followup_algorithm1_example_semantics_v3",
+    "k-bdpt-literal": "followup_algorithm1_literal_v1",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,9 +87,20 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--algorithm",
-        choices=("bdpt", "k-bdpt"),
+        choices=("bdpt", "k-bdpt", "k-bdpt-literal"),
         default="bdpt",
-        help="主论文 Algorithm 2，或后续论文的密钥旁路 K-BDPT",
+        help=(
+            "主论文 Algorithm 2、按 Example 2 补齐终态语义的 K-BDPT，"
+            "或字面伪代码 K-BDPT 诊断模式"
+        ),
+    )
+    parser.add_argument(
+        "--constant-values",
+        default=None,
+        help=(
+            "按输入模式中 c 的论文打印顺序指定全部 0/1 值；"
+            "省略时按论文的未知常量初态建模"
+        ),
     )
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args()
@@ -95,6 +116,7 @@ def initial_payload(
     config: dict[str, Any],
     parameters: SPNParameters,
     algorithm: str,
+    constant_semantics: dict[str, str],
 ) -> dict[str, Any]:
     import gurobipy as gp
 
@@ -102,6 +124,8 @@ def initial_payload(
         "experiment": "paper_table5_spn",
         "case": experiment,
         "algorithm": algorithm,
+        "algorithm_version": ALGORITHM_VERSIONS[algorithm],
+        "constant_semantics": constant_semantics,
         "environment": {
             "python": sys.version,
             "platform": platform.platform(),
@@ -210,7 +234,35 @@ def main() -> int:
     config = load_config(args.experiment)
     parameters = PARAMETERS[str(config["cipher"])]
     rounds = int(config["rounds"])
-    algorithm_suffix = "" if args.algorithm == "bdpt" else "_k_bdpt"
+    layout = PAPER_LAYOUTS[str(config["cipher"])]
+    active = active_indices_from_layout_pattern(
+        str(config["input_pattern"]),
+        layout,
+    )
+    if args.constant_values is None:
+        initial_state = theoretical_unknown_constant_cube_state(
+            parameters.block_size, active
+        )
+        constant_semantics = {"mode": "unknown"}
+    else:
+        normalized_values = compact_pattern(args.constant_values)
+        constants = constant_values_from_layout_pattern(
+            str(config["input_pattern"]),
+            layout,
+            normalized_values,
+        )
+        initial_state = theoretical_known_constant_cube_state(
+            parameters.block_size,
+            active,
+            constants,
+        )
+        constant_semantics = {
+            "mode": "known",
+            "values_in_print_order": normalized_values,
+        }
+    algorithm_suffix = (
+        "" if args.algorithm == "bdpt" else f"_{args.algorithm.replace('-', '_')}"
+    )
     output = args.output or Path(
         f"output/results/table5_{args.experiment}{algorithm_suffix}.json"
     )
@@ -220,13 +272,23 @@ def main() -> int:
             raise ValueError("已有检查点的实验配置与当前命令不一致")
         if payload.get("algorithm", "bdpt") != args.algorithm:
             raise ValueError("已有检查点的搜索算法与当前命令不一致")
+        if payload.get("algorithm_version") != ALGORITHM_VERSIONS[args.algorithm]:
+            raise ValueError(
+                "已有检查点使用旧算法语义，请使用新的 --output 路径"
+            )
+        if payload.get("constant_semantics", {"mode": "unknown"}) != constant_semantics:
+            raise ValueError("已有检查点的常量语义与当前命令不一致")
         if payload.get("config") != config:
             raise ValueError(
                 "已有检查点由旧配置生成，请移动旧文件或使用新的 --output 路径"
             )
     else:
         payload = initial_payload(
-            args.experiment, config, parameters, args.algorithm
+            args.experiment,
+            config,
+            parameters,
+            args.algorithm,
+            constant_semantics,
         )
 
     targets = (
@@ -237,16 +299,12 @@ def main() -> int:
     if any(index < 0 or index >= parameters.block_size for index in targets):
         raise ValueError("目标位超出密码状态范围")
 
-    active = active_indices_from_layout_pattern(
-        str(config["input_pattern"]),
-        PAPER_LAYOUTS[str(config["cipher"])],
-    )
-    initial_state = theoretical_unknown_constant_cube_state(
-        parameters.block_size, active
-    )
     if args.algorithm == "k-bdpt":
         parts = spn_k_bdpt_parts(parameters, rounds)
         search = search_k_bdpt
+    elif args.algorithm == "k-bdpt-literal":
+        parts = spn_k_bdpt_parts(parameters, rounds)
+        search = search_k_bdpt_literal
     else:
         parts = spn_search_parts(parameters, rounds)
         search = search_bdpt

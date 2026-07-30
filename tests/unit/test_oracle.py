@@ -5,6 +5,7 @@ from three_set_milp.core.oracle import (
     cube_multiset,
     exact_state_from_multiset,
     state_matches_family,
+    theoretical_known_constant_cube_state,
     theoretical_unknown_constant_cube_state,
     unknown_constant_cube_state,
 )
@@ -54,3 +55,23 @@ def test_initial_state_exactly_describes_all_constant_assignments() -> None:
     state = theoretical_unknown_constant_cube_state(width, active)
     assert state_matches_family(state, multisets)
 
+
+def test_known_constant_initial_state_matches_exact_cube() -> None:
+    constants = {0: 1, 3: 0}
+    exact = exact_state_from_multiset(
+        cube_multiset(
+            width=4,
+            active_indices={1, 2},
+            constants=constants,
+        ),
+        width=4,
+    )
+    theoretical = theoretical_known_constant_cube_state(
+        width=4,
+        active_indices={1, 2},
+        constants=constants,
+    )
+
+    assert theoretical == exact
+    assert theoretical.k == frozenset()
+    assert theoretical.l == frozenset({0b0110, 0b0111})

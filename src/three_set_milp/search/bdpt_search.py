@@ -41,6 +41,10 @@ class TraceEntry:
     l_after_propagation: int | None
     key_bypassed: bool | None = None
     decisive_vector: int | None = None
+    secret_key_index: int | None = None
+    bypass_l_count: int | None = None
+    bypass_parity: str | None = None
+    bypass_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +106,7 @@ def search_k_bdpt(
     parts: Sequence[SearchPart],
     suffix_oracle: SuffixOracle,
 ) -> SearchResult:
-    """执行后续论文 Algorithm 1，在满足定理 3 时旁路轮密钥。"""
+    """按论文 Example 2 的终态三值语义执行 K-BDPT。"""
     unit_vector(target_index, initial_state.width)
     if not parts:
         raise ValueError("K-BDPT 搜索至少需要一个局部函数")
@@ -117,6 +121,27 @@ def search_k_bdpt(
     )
 
 
+def search_k_bdpt_literal(
+    initial_state: BDPTState,
+    target_index: int,
+    parts: Sequence[SearchPart],
+    suffix_oracle: SuffixOracle,
+) -> SearchResult:
+    """按两篇论文伪代码末行的字面 ``return 1`` 执行 K-BDPT。"""
+    unit_vector(target_index, initial_state.width)
+    if not parts:
+        raise ValueError("K-BDPT 搜索至少需要一个局部函数")
+
+    return _search_bdpt(
+        initial_state,
+        target_index,
+        parts,
+        suffix_oracle,
+        enable_key_bypass=True,
+        check_final_state=False,
+    )
+
+
 def _final_result(state: BDPTState, target_index: int) -> SearchResult:
     """执行主论文 Algorithm 2 第 22 行的终点规则。"""
     unit_vector(target_index, state.width)
@@ -128,7 +153,7 @@ def _final_result(state: BDPTState, target_index: int) -> SearchResult:
 
 
 def _final_state_parity(state: BDPTState, target_index: int) -> Parity:
-    """仅供 K-BDPT 旁路子问题读取已经位于输出端的状态。"""
+    """读取已经传播到输出端的精确 BDPT 三值结果。"""
     return state.parity(unit_vector(target_index, state.width))
 
 
@@ -136,7 +161,7 @@ def _final_state_result(
     state: BDPTState,
     target_index: int,
 ) -> SearchResult:
-    """读取最终 BDPT；用于后续论文算法的内部旁路子问题。"""
+    """补齐 Algorithm 2 末端未显式处理的抵消结果。"""
     parity = _final_state_parity(state, target_index)
     reasons = {
         Parity.ZERO: StopReason.FINAL_ZERO,
@@ -175,6 +200,7 @@ def _search_bdpt(
                         k_after_propagation=None,
                         l_after_propagation=None,
                         decisive_vector=vector,
+                        secret_key_index=part.secret_key_index,
                     )
                 )
                 return SearchResult(
@@ -201,6 +227,7 @@ def _search_bdpt(
                     l_survivors=0,
                     k_after_propagation=None,
                     l_after_propagation=None,
+                    secret_key_index=part.secret_key_index,
                 )
             )
             return SearchResult(
@@ -223,21 +250,16 @@ def _search_bdpt(
             )
             bypass_input = BDPTState(width=current.width, l=shifted_l)
             remaining_parts = parts[part_index + 1 :]
-            if remaining_parts:
-                bypass_result = _search_bdpt(
-                    bypass_input,
-                    target_index,
-                    remaining_parts,
-                    suffix_oracle,
-                    enable_key_bypass=False,
-                    check_final_state=True,
-                )
-                bypass_parity = bypass_result.parity
-            else:
-                bypass_parity = _final_state_parity(
-                    bypass_input,
-                    target_index,
-                )
+            # Algorithm 1 第 20 行调用原始 BDPT；不递归使用 K-BDPT。
+            bypass_result = _search_bdpt(
+                bypass_input,
+                target_index,
+                remaining_parts,
+                suffix_oracle,
+                enable_key_bypass=False,
+                check_final_state=check_final_state,
+            )
+            bypass_parity = bypass_result.parity
             key_bypassed = bypass_parity is Parity.ZERO
             propagated = pruned if key_bypassed else part.propagate(pruned)
         else:
@@ -255,6 +277,16 @@ def _search_bdpt(
                 k_after_propagation=len(propagated.k),
                 l_after_propagation=len(propagated.l),
                 key_bypassed=key_bypassed,
+                secret_key_index=part.secret_key_index,
+                bypass_l_count=len(shifted_l)
+                if part.secret_key_index is not None and enable_key_bypass
+                else None,
+                bypass_parity=bypass_parity.value
+                if part.secret_key_index is not None and enable_key_bypass
+                else None,
+                bypass_reason=bypass_result.reason.value
+                if part.secret_key_index is not None and enable_key_bypass
+                else None,
             )
         )
         current = propagated

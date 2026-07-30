@@ -6,6 +6,7 @@ from three_set_milp.core.patterns import (
     active_indices_from_layout_pattern,
     active_indices_from_pattern,
     compact_pattern,
+    constant_values_from_layout_pattern,
     format_parity_index_pattern,
     format_parity_layout_pattern,
     format_parity_pattern,
@@ -33,6 +34,14 @@ def test_explicit_layout_pattern_supports_cipher_specific_order() -> None:
     assert active_indices_from_layout_pattern("acca", layout) == frozenset({1, 2})
     results = {1: Parity.ZERO, 0: Parity.UNKNOWN, 3: Parity.ONE}
     assert format_parity_layout_pattern(results, layout, group_size=2) == "b?,1-"
+
+
+def test_layout_constant_values_follow_print_order() -> None:
+    layout = (3, 1, 2, 0)
+    assert constant_values_from_layout_pattern("caca", layout, "10") == {
+        3: 1,
+        2: 0,
+    }
 
 
 @pytest.mark.parametrize("pattern", ["aaa", "aacx", ""])

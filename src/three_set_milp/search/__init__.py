@@ -7,6 +7,7 @@ from .bdpt_search import (
     StopReason,
     search_bdpt,
     search_k_bdpt,
+    search_k_bdpt_literal,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "StopReason",
     "search_bdpt",
     "search_k_bdpt",
+    "search_k_bdpt_literal",
 ]

@@ -59,7 +59,13 @@ python experiments/reproduce_table5_spn.py rectangle60
 
 Table 5 使用逐密码显式 layout：PRESENT 按规范的 `x63,...,x0`，RECTANGLE 按 row0--row3 且每行 column15--column0。PRESENT/RECTANGLE 的 CBDP S 盒分别使用原论文附录的 11/17 条紧凑不等式。若服务器上存在早期版本生成的 Table 5 检查点，请先改名保存；新脚本会拒绝混用旧位序、搜索算法或未约化 S 盒结果。
 
-Table 5 脚本默认执行主论文 Algorithm 2。后续论文的 `--algorithm k-bdpt` 入口仍保留为实验代码，但在主论文方法完成审计前不作为 Table 5 的验收路径。主论文的逐页审计记录见 [docs/main-paper-audit.md](docs/main-paper-audit.md)。
+Table 5 脚本默认执行主论文 Algorithm 2。后续论文的 K-BDPT 已完成逐页审计：`--algorithm k-bdpt` 使用论文 Example 2 所要求的终态三值语义；`--algorithm k-bdpt-literal` 严格按伪代码末行 `return 1`，仅用于诊断论文中已记录的终态歧义。两种模式不能混用检查点。完整证据和处理方案见 [docs/followup-paper-audit-and-solutions.md](docs/followup-paper-audit-and-solutions.md)。
+
+Table 5 的 `c` 默认表示论文中“取值未给定的固定常量”，不能默认当作 0。若只想诊断全部常量值已知的特定 cube，可显式指定输入模式中 `c` 的论文打印顺序：
+
+```console
+python experiments/reproduce_table5_spn.py present60 --algorithm k-bdpt --constant-values 0101 --targets 4 --output output/results/present60_k_bdpt_known_0101_target4.json
+```
 
 若某个目标位由 Stopping Rule 1 返回 unknown，可使用 `--record-witness` 重新求解决定性 K 向量，导出完整 CBDP trail，并逐个核验 S 盒 transition 和位排列：
 

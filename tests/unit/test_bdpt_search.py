@@ -9,6 +9,7 @@ from three_set_milp.search.bdpt_search import (
     StopReason,
     search_bdpt,
     search_k_bdpt,
+    search_k_bdpt_literal,
 )
 
 
@@ -116,6 +117,52 @@ def test_k_bdpt_reproduces_followup_paper_example_2() -> None:
     improved = search_k_bdpt(initial, 0, parts, oracle)
     assert improved.parity is Parity.ZERO
     assert improved.trace[0].key_bypassed is True
+
+    literal = search_k_bdpt_literal(initial, 0, parts, oracle)
+    assert literal.parity is Parity.UNKNOWN
+    assert literal.trace[0].key_bypassed is False
+
+
+def test_k_bdpt_uses_semantic_final_state_for_paper_example_style_bypass() -> None:
+    initial = BDPTState(width=2, l=frozenset({0b10}))
+    key_part = SearchPart(
+        Boundary(0),
+        lambda state: xor_secret_key(state, 0),
+        secret_key_index=0,
+    )
+
+    result = search_k_bdpt(
+        initial,
+        0,
+        [key_part],
+        lambda boundary, vector, target: True,
+    )
+
+    assert result.parity is Parity.ZERO
+    assert result.trace[0].key_bypassed is True
+    assert result.trace[0].bypass_parity == "zero"
+    assert result.trace[0].bypass_reason == "final_zero"
+
+
+def test_k_bdpt_literal_mode_keeps_algorithm_2_terminal_return_one() -> None:
+    initial = BDPTState(width=2, l=frozenset({0b10}))
+    key_part = SearchPart(
+        Boundary(0),
+        lambda state: xor_secret_key(state, 0),
+        secret_key_index=0,
+    )
+
+    result = search_k_bdpt_literal(
+        initial,
+        0,
+        [key_part],
+        lambda boundary, vector, target: True,
+    )
+
+    assert result.parity is Parity.ONE
+    assert result.trace[0].key_bypassed is False
+    assert result.trace[0].k_after_propagation == 1
+    assert result.trace[0].bypass_reason == "final_one"
 
 
 def test_k_generated_by_one_part_is_checked_at_next_boundary() -> None:

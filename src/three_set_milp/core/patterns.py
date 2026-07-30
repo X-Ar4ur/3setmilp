@@ -55,6 +55,37 @@ def active_indices_from_layout_pattern(
     )
 
 
+def constant_values_from_layout_pattern(
+    pattern: str,
+    printed_indices: tuple[int, ...],
+    values: str,
+) -> dict[int, int]:
+    """按输入模式中 ``c`` 的打印顺序解析所有已知常量值。"""
+    width = len(printed_indices)
+    if sorted(printed_indices) != list(range(width)):
+        raise ValueError("打印 layout 必须恰好包含全部内部索引")
+    compact = compact_pattern(pattern).lower()
+    if len(compact) != width or any(char not in "ac" for char in compact):
+        raise ValueError("输入模式长度或字符不合法")
+
+    compact_values = compact_pattern(values)
+    constant_indices = tuple(
+        internal_index
+        for char, internal_index in zip(
+            compact, printed_indices, strict=True
+        )
+        if char == "c"
+    )
+    if len(compact_values) != len(constant_indices):
+        raise ValueError("常量值数量必须与输入模式中的 c 数量一致")
+    if any(bit not in "01" for bit in compact_values):
+        raise ValueError("常量值只能由 0 和 1 组成")
+    return {
+        index: int(bit)
+        for index, bit in zip(constant_indices, compact_values, strict=True)
+    }
+
+
 def format_parity_pattern(
     results: Mapping[int, Parity],
     width: int,
