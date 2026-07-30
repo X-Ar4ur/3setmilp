@@ -1,6 +1,7 @@
 """PRESENT/RECTANGLE 的 Algorithm 2 局部序列与 Gurobi oracle。"""
 
 from functools import partial
+from typing import Literal
 
 from three_set_milp.ciphers.spn import (
     SPNParameters,
@@ -13,6 +14,9 @@ from three_set_milp.milp.gurobi_backend import SolveStatus
 from three_set_milp.milp.spn import SPNBoundary, SPNSuffixModel
 
 from .bdpt_search import SearchPart
+
+
+KeyBitOrder = Literal["ascending", "descending"]
 
 
 def spn_search_parts(
@@ -48,11 +52,20 @@ def spn_search_parts(
 
 
 def spn_k_bdpt_parts(
-    parameters: SPNParameters, rounds: int
+    parameters: SPNParameters,
+    rounds: int,
+    *,
+    key_bit_order: KeyBitOrder = "ascending",
 ) -> tuple[SearchPart, ...]:
     """按后续论文 Algorithm 1 将每个轮密钥比特拆成独立局部函数。"""
     if rounds <= 0:
         raise ValueError("轮数必须为正数")
+    if key_bit_order == "ascending":
+        key_indices = range(parameters.block_size)
+    elif key_bit_order == "descending":
+        key_indices = range(parameters.block_size - 1, -1, -1)
+    else:
+        raise ValueError("轮密钥比特顺序只能是 ascending 或 descending")
     parts: list[SearchPart] = []
     sbox_count = len(parameters.sbox_groups)
     for round_index in range(rounds):
@@ -77,7 +90,7 @@ def spn_k_bdpt_parts(
             )
         )
         next_boundary = SPNBoundary(round_index + 1, 0)
-        for key_index in range(parameters.block_size):
+        for key_index in key_indices:
             parts.append(
                 SearchPart(
                     boundary=next_boundary,

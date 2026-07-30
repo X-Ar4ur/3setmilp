@@ -1,3 +1,5 @@
+import pytest
+
 from three_set_milp.ciphers.present import (
     PRESENT,
     PRESENT_PAPER_PRINT_INDICES,
@@ -14,6 +16,7 @@ from three_set_milp.ciphers.rectangle import (
 )
 from three_set_milp.ciphers.spn import propagate_public_permutation
 from three_set_milp.core.bdpt import BDPTState
+from three_set_milp.core.bitvector import unit_vector
 from three_set_milp.milp.spn import SPNBoundary
 from three_set_milp.search.spn import spn_k_bdpt_parts
 
@@ -72,10 +75,43 @@ def test_table5_cipher_layouts_are_explicit() -> None:
     assert RECTANGLE_PAPER_PRINT_INDICES[16:32] == tuple(reversed(range(16, 32)))
 
 
-def test_k_bdpt_splits_every_round_key_bit() -> None:
-    parts = spn_k_bdpt_parts(PRESENT, rounds=1)
+@pytest.mark.parametrize(
+    ("key_bit_order", "expected_indices"),
+    [
+        ("ascending", list(range(64))),
+        ("descending", list(reversed(range(64)))),
+    ],
+)
+def test_k_bdpt_splits_every_round_key_bit(
+    key_bit_order: str,
+    expected_indices: list[int],
+) -> None:
+    parts = spn_k_bdpt_parts(
+        PRESENT,
+        rounds=2,
+        key_bit_order=key_bit_order,
+    )
 
-    assert len(parts) == 16 + 1 + 64
-    assert parts[16].boundary == SPNBoundary(0, 16)
-    assert [part.secret_key_index for part in parts[17:]] == list(range(64))
-    assert all(part.boundary == SPNBoundary(1, 0) for part in parts[17:])
+    round_width = 16 + 1 + 64
+    assert len(parts) == 2 * round_width
+    for round_index in range(2):
+        offset = round_index * round_width
+        assert parts[offset + 16].boundary == SPNBoundary(round_index, 16)
+        key_parts = parts[offset + 17 : offset + round_width]
+        assert [part.secret_key_index for part in key_parts] == expected_indices
+        assert all(
+            part.boundary == SPNBoundary(round_index + 1, 0)
+            for part in key_parts
+        )
+        checked_parts = (
+            (key_parts[0], expected_indices[0]),
+            (key_parts[-1], expected_indices[-1]),
+        )
+        for part, index in checked_parts:
+            output = part.propagate(BDPTState(width=64, l=frozenset({0})))
+            assert output.k == frozenset({unit_vector(index, 64)})
+
+
+def test_k_bdpt_rejects_unknown_key_bit_order() -> None:
+    with pytest.raises(ValueError, match="轮密钥比特顺序"):
+        spn_k_bdpt_parts(PRESENT, rounds=1, key_bit_order="middle")

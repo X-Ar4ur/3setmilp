@@ -45,6 +45,9 @@ class TraceEntry:
     bypass_l_count: int | None = None
     bypass_parity: str | None = None
     bypass_reason: str | None = None
+    bypass_l_prime: tuple[int, ...] | None = None
+    bypass_obstruction_boundary: Hashable | None = None
+    bypass_obstruction_vector: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +108,8 @@ def search_k_bdpt(
     target_index: int,
     parts: Sequence[SearchPart],
     suffix_oracle: SuffixOracle,
+    *,
+    record_bypass_provenance: bool = False,
 ) -> SearchResult:
     """按论文 Example 2 的终态三值语义执行 K-BDPT。"""
     unit_vector(target_index, initial_state.width)
@@ -118,6 +123,7 @@ def search_k_bdpt(
         suffix_oracle,
         enable_key_bypass=True,
         check_final_state=True,
+        record_bypass_provenance=record_bypass_provenance,
     )
 
 
@@ -126,6 +132,8 @@ def search_k_bdpt_literal(
     target_index: int,
     parts: Sequence[SearchPart],
     suffix_oracle: SuffixOracle,
+    *,
+    record_bypass_provenance: bool = False,
 ) -> SearchResult:
     """按两篇论文伪代码末行的字面 ``return 1`` 执行 K-BDPT。"""
     unit_vector(target_index, initial_state.width)
@@ -139,6 +147,7 @@ def search_k_bdpt_literal(
         suffix_oracle,
         enable_key_bypass=True,
         check_final_state=False,
+        record_bypass_provenance=record_bypass_provenance,
     )
 
 
@@ -179,6 +188,7 @@ def _search_bdpt(
     *,
     enable_key_bypass: bool,
     check_final_state: bool,
+    record_bypass_provenance: bool = False,
 ) -> SearchResult:
     """共享主搜索循环；K-BDPT 的内层判定始终调用原始 BDPT。"""
 
@@ -241,6 +251,11 @@ def _search_bdpt(
             l=frozenset(survivors),
         )
         key_bypassed: bool | None = None
+        bypass_parity: Parity | None = None
+        bypass_reason: StopReason | None = None
+        bypass_l_prime: tuple[int, ...] | None = None
+        bypass_obstruction_boundary: Hashable | None = None
+        bypass_obstruction_vector: int | None = None
         if enable_key_bypass and part.secret_key_index is not None:
             bit_mask = unit_vector(part.secret_key_index, current.width)
             shifted_l = frozenset(
@@ -260,7 +275,15 @@ def _search_bdpt(
                 check_final_state=check_final_state,
             )
             bypass_parity = bypass_result.parity
+            bypass_reason = bypass_result.reason
             key_bypassed = bypass_parity is Parity.ZERO
+            if record_bypass_provenance and not key_bypassed:
+                # Rule 1 会把 L'_i 中的向量加入 K；只记录失败旁路以避免常规轨迹膨胀。
+                bypass_l_prime = tuple(sorted(shifted_l))
+                if bypass_reason is StopReason.K_REACHABLE:
+                    obstruction = bypass_result.trace[-1]
+                    bypass_obstruction_boundary = obstruction.boundary
+                    bypass_obstruction_vector = obstruction.decisive_vector
             propagated = pruned if key_bypassed else part.propagate(pruned)
         else:
             propagated = part.propagate(pruned)
@@ -282,11 +305,14 @@ def _search_bdpt(
                 if part.secret_key_index is not None and enable_key_bypass
                 else None,
                 bypass_parity=bypass_parity.value
-                if part.secret_key_index is not None and enable_key_bypass
+                if bypass_parity is not None
                 else None,
-                bypass_reason=bypass_result.reason.value
-                if part.secret_key_index is not None and enable_key_bypass
+                bypass_reason=bypass_reason.value
+                if bypass_reason is not None
                 else None,
+                bypass_l_prime=bypass_l_prime,
+                bypass_obstruction_boundary=bypass_obstruction_boundary,
+                bypass_obstruction_vector=bypass_obstruction_vector,
             )
         )
         current = propagated

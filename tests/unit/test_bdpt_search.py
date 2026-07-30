@@ -136,12 +136,15 @@ def test_k_bdpt_uses_semantic_final_state_for_paper_example_style_bypass() -> No
         0,
         [key_part],
         lambda boundary, vector, target: True,
+        record_bypass_provenance=True,
     )
 
     assert result.parity is Parity.ZERO
     assert result.trace[0].key_bypassed is True
     assert result.trace[0].bypass_parity == "zero"
     assert result.trace[0].bypass_reason == "final_zero"
+    assert result.trace[0].bypass_l_prime is None
+    assert result.trace[0].bypass_obstruction_vector is None
 
 
 def test_k_bdpt_literal_mode_keeps_algorithm_2_terminal_return_one() -> None:
@@ -163,6 +166,47 @@ def test_k_bdpt_literal_mode_keeps_algorithm_2_terminal_return_one() -> None:
     assert result.trace[0].key_bypassed is False
     assert result.trace[0].k_after_propagation == 1
     assert result.trace[0].bypass_reason == "final_one"
+
+
+def test_k_bdpt_records_failed_bypass_provenance() -> None:
+    key_boundary = Boundary(0)
+    child_boundary = Boundary(1)
+    obstruction_boundary = Boundary(2)
+
+    def promote_l_to_k(state: BDPTState) -> BDPTState:
+        return BDPTState(width=3, k=state.l, l=state.l)
+
+    parts = [
+        SearchPart(
+            key_boundary,
+            lambda state: xor_secret_key(state, 0),
+            secret_key_index=0,
+        ),
+        SearchPart(child_boundary, promote_l_to_k),
+        SearchPart(obstruction_boundary, _identity),
+    ]
+
+    def oracle(boundary: object, vector: int, target: int) -> bool:
+        return boundary == key_boundary or vector == 0b011
+
+    result = search_k_bdpt(
+        BDPTState(width=3, l=frozenset({0b010, 0b101})),
+        0,
+        parts,
+        oracle,
+        record_bypass_provenance=True,
+    )
+
+    key_trace = result.trace[0]
+    assert key_trace.secret_key_index == 0
+    assert key_trace.key_bypassed is False
+    assert key_trace.decisive_vector is None
+    assert key_trace.bypass_l_count == 1
+    assert key_trace.bypass_parity == "unknown"
+    assert key_trace.bypass_reason == "k_reachable"
+    assert key_trace.bypass_l_prime == (0b011,)
+    assert key_trace.bypass_obstruction_boundary == obstruction_boundary
+    assert key_trace.bypass_obstruction_vector == 0b011
 
 
 def test_k_generated_by_one_part_is_checked_at_next_boundary() -> None:

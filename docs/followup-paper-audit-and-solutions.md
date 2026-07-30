@@ -70,7 +70,15 @@
 - `bypass_l_count`：构造出的 \(L'_i\) 大小；
 - `bypass_parity` 与 `bypass_reason`：旁路后缀是因 `l_empty`、终态 zero 或其他原因得到的结果。
 
-新输出会使用算法版本字段拒绝混用旧 K-BDPT 检查点。此前 `target=4` 的 JSON 因此不能作为后续论文的最终复现证据，必须重新运行。
+当命令带有 `--record-witness` 且旁路失败时，轨迹还记录：
+
+- `bypass_l_prime`：Theorem 3 的完整 \(L'_i\)，它也是随后 Rule 1 生成 K 的候选向量集合；
+- `bypass_obstruction_boundary` 与 `bypass_obstruction_vector`：嵌套原始 BDPT 首个触发 Stopping Rule 1 的 CBDP 输入；
+- `bypass_obstruction_witnesses`：对上述输入重新求解并逐步验证的 CBDP trail。
+
+新输出会使用算法版本字段和轮密钥扫描顺序拒绝混用旧 K-BDPT 检查点。此前 `target=4` 的 JSON 因此不能作为后续论文的最终复现证据，必须重新运行。
+
+若同一 v4 检查点先在未使用 `--record-witness` 的情况下完成，之后加上该参数时脚本会自动重跑缺少证据的目标位，而不会错误地跳过它。
 
 ### P3：`c` 的语义不能被擅自改成某个 0/1 赋值
 
@@ -99,15 +107,24 @@ python experiments/reproduce_table5_spn.py present60 \
 
 **证据。** 论文给出泛化的“Xor with The Secret Key”函数，但在第 301--302 页没有说明 64 位 PRESENT 子密钥拆成标量函数的顺序。
 
-**当前选择。** 实现使用内部编号 `0 -> 63`，并在轨迹中写出实际编号。这一选择不会修改 CBDP 后缀模型，但可能影响 K-BDPT 的旁路次序和中间集合大小。
+**当前实现。** `--key-bit-order ascending` 使用内部编号 `0 -> 63`，保持原有默认语义；`--key-bit-order descending` 显式使用 `63 -> 0`。二者均写入 JSON 的 `key_bit_order`，并使用不同默认检查点文件，不能相互续跑。这一选择不会修改 CBDP 后缀模型，但可能影响 K-BDPT 的旁路次序和中间集合大小。
 
-**后续验证。** 若默认 K-BDPT 仍不能复现 Table 6，应新增“反序 `63 -> 0`”的显式诊断，而不是静默替换默认顺序。
+**诊断命令。** 反序仅是论文未公开细节的对照，不是新的默认模型：
+
+```console
+python experiments/reproduce_table5_spn.py present60 \
+  --algorithm k-bdpt \
+  --key-bit-order descending \
+  --targets 4 \
+  --record-witness \
+  --output output/results/table5_present60_k_bdpt_key_descending_target4.json
+```
 
 ### P5：Table 6 缺少可直接复核的性能与实现参数
 
 **证据。** 后续论文第 302 页只说明结果与主论文一致；没有给出 PRESENT/RECTANGLE 的逐目标位耗时、具体常量值、轮密钥拆分顺序或 MILP 模型构造细节。
 
-**解决方案。** 本项目把每个目标位的耗时、oracle 调用数、算法版本、常量语义及完整剪枝/旁路轨迹写入 JSON。性能比较只在相同服务器、Gurobi 版本、目标位和算法模式下进行，不能直接拿论文平台的总时间作一一结论。
+**解决方案。** 本项目把每个目标位的耗时、oracle 调用数、算法版本、常量语义、轮密钥扫描顺序及完整剪枝/旁路轨迹写入 JSON。带 `--record-witness` 的 K-BDPT 结果还会保存失败旁路的阻塞 CBDP witness。性能比较只在相同服务器、Gurobi 版本、目标位和算法模式下进行，不能直接拿论文平台的总时间作一一结论。
 
 ## 4. 已增加的验证
 
@@ -115,8 +132,10 @@ python experiments/reproduce_table5_spn.py present60 \
 - 字面伪代码模式：后续论文 Example 2 返回 unknown、不旁路；用来固定 P1 所述差异。另有一个末端小型案例验证字面模式的 `return 1` 行为。
 - 已知常量初态：在 4 bit 穷举中，与精确 cube 的 BDPT 状态完全一致。
 - 常量值字符串：按显式密码 layout 解析，避免把论文打印顺序误当作内部 bit 顺序。
+- 轮密钥顺序：两轮 PRESENT 部件序列分别固定验证 `0 -> 63` 与 `63 -> 0`，并验证首尾局部函数确实作用于对应密钥 bit。
+- 失败旁路来源：纯 Python 回归样例验证 `L'_i`、嵌套 BDPT 的阻塞边界和决定性 K 向量会被准确记录。
 
-本地相关单元测试：`22 passed`。Gurobi 端到端结果仍需服务器验证。
+本地测试：`86 passed, 12 skipped`；跳过项均因本机没有 `gurobipy`。Gurobi 端到端结果仍需服务器验证。
 
 ## 5. 下一次服务器实验顺序
 
@@ -127,7 +146,18 @@ python experiments/reproduce_table5_spn.py present60 \
   --algorithm k-bdpt \
   --targets 4 \
   --record-witness \
-  --output output/results/table5_present60_k_bdpt_v3_target4.json
+  --output output/results/table5_present60_k_bdpt_key_ascending_target4.json
+```
+
+再只改变标量轮密钥扫描方向：
+
+```console
+python experiments/reproduce_table5_spn.py present60 \
+  --algorithm k-bdpt \
+  --key-bit-order descending \
+  --targets 4 \
+  --record-witness \
+  --output output/results/table5_present60_k_bdpt_key_descending_target4.json
 ```
 
 然后以字面模式做同目标对照：
@@ -139,4 +169,16 @@ python experiments/reproduce_table5_spn.py present60 \
   --output output/results/table5_present60_k_bdpt_literal_target4.json
 ```
 
-只有默认 K-BDPT 在通用 `c` 初态上通过目标位 4 后，才继续跑 `0 4 8 12`；已知常量赋值矩阵是独立诊断，不作为替代验收条件。
+最后在默认升序下对四个 `c` 的 16 种赋值执行独立诊断；这些结果不能替代通用 `c` 初态的论文复现：
+
+```console
+for c in 0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111; do
+  python experiments/reproduce_table5_spn.py present60 \
+    --algorithm k-bdpt \
+    --constant-values "$c" \
+    --targets 4 \
+    --output "output/results/table5_present60_k_bdpt_known_${c}_target4.json"
+done
+```
+
+只有默认 K-BDPT 在通用 `c` 初态上通过目标位 4 后，才继续跑 `0 4 8 12`。

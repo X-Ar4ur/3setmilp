@@ -67,6 +67,30 @@ Table 5 的 `c` 默认表示论文中“取值未给定的固定常量”，不�
 python experiments/reproduce_table5_spn.py present60 --algorithm k-bdpt --constant-values 0101 --targets 4 --output output/results/present60_k_bdpt_known_0101_target4.json
 ```
 
+K-BDPT 的轮密钥标量扫描顺序在后续论文中没有给定。默认 `ascending` 保持原有内部 bit `0 -> 63` 的诊断语义；`descending` 是独立对照，不会静默改变默认复现。使用 `--record-witness` 时，检查点还会导出每个失败旁路的 `L'_i`、阻塞 CBDP 输入向量和经重放验证的轨迹。
+
+```console
+# 标准未知常量初态下，仅测试反序轮密钥扫描。
+python experiments/reproduce_table5_spn.py present60 \
+  --algorithm k-bdpt \
+  --key-bit-order descending \
+  --targets 4 \
+  --record-witness \
+  --output output/results/table5_present60_k_bdpt_key_descending_target4.json
+```
+
+已知常量赋值仅作诊断，先在默认升序下枚举四个 `c` 的 16 种赋值；每个结果使用独立检查点，便于中断后续跑：
+
+```console
+for c in 0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111; do
+  python experiments/reproduce_table5_spn.py present60 \
+    --algorithm k-bdpt \
+    --constant-values "$c" \
+    --targets 4 \
+    --output "output/results/table5_present60_k_bdpt_known_${c}_target4.json"
+done
+```
+
 若某个目标位由 Stopping Rule 1 返回 unknown，可使用 `--record-witness` 重新求解决定性 K 向量，导出完整 CBDP trail，并逐个核验 S 盒 transition 和位排列：
 
 ```console

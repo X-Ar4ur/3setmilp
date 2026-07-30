@@ -58,8 +58,8 @@ PAPER_LAYOUTS = {
 EXPERIMENTS = ("present60", "present63", "rectangle60")
 ALGORITHM_VERSIONS = {
     "bdpt": None,
-    "k-bdpt": "followup_algorithm1_example_semantics_v3",
-    "k-bdpt-literal": "followup_algorithm1_literal_v1",
+    "k-bdpt": "followup_algorithm1_example_semantics_v4",
+    "k-bdpt-literal": "followup_algorithm1_literal_v2",
 }
 
 
@@ -102,6 +102,15 @@ def parse_args() -> argparse.Namespace:
             "省略时按论文的未知常量初态建模"
         ),
     )
+    parser.add_argument(
+        "--key-bit-order",
+        choices=("ascending", "descending"),
+        default="ascending",
+        help=(
+            "K-BDPT 将轮密钥拆成标量 XOR 后的扫描顺序；"
+            "默认 ascending 保持现有复现语义"
+        ),
+    )
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args()
 
@@ -117,6 +126,7 @@ def initial_payload(
     parameters: SPNParameters,
     algorithm: str,
     constant_semantics: dict[str, str],
+    key_bit_order: str | None,
 ) -> dict[str, Any]:
     import gurobipy as gp
 
@@ -126,6 +136,7 @@ def initial_payload(
         "algorithm": algorithm,
         "algorithm_version": ALGORITHM_VERSIONS[algorithm],
         "constant_semantics": constant_semantics,
+        "key_bit_order": key_bit_order,
         "environment": {
             "python": sys.version,
             "platform": platform.platform(),
@@ -162,6 +173,13 @@ def update_summary(
     }
 
 
+def has_recorded_witness(result: dict[str, Any], algorithm: str) -> bool:
+    """判断续跑时是否已保存当前算法所需的审计证据。"""
+    if "decisive_cbdp_witness" not in result:
+        return False
+    return algorithm == "bdpt" or "bypass_obstruction_witnesses" in result
+
+
 def write_checkpoint(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -170,32 +188,26 @@ def write_checkpoint(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
-def build_decisive_witness(
+def build_cbdp_witness(
     parameters: SPNParameters,
     rounds: int,
-    result: SearchResult,
+    boundary: SPNBoundary,
+    input_vector: int,
     target_index: int,
     *,
     time_limit: float | None,
     output_flag: bool,
-) -> dict[str, Any] | None:
-    """为 Stopping Rule 1 的可行结论重新求解并导出可审计轨迹。"""
-    if result.reason is not StopReason.K_REACHABLE:
-        return None
-    decisive = result.trace[-1]
-    if not isinstance(decisive.boundary, SPNBoundary):
-        raise TypeError("决定性轨迹不是 SPN 边界")
-    if decisive.decisive_vector is None:
-        raise RuntimeError("Stopping Rule 1 缺少决定性 K 向量")
+) -> dict[str, Any]:
+    """重新求解并导出指定 CBDP 输入向量的可审计轨迹。"""
 
     model = SPNSuffixModel(
         parameters,
         rounds,
-        decisive.boundary,
+        boundary,
         output_flag=output_flag,
     )
     status = model.check_trail(
-        decisive.decisive_vector,
+        input_vector,
         target_index,
         time_limit=time_limit,
     )
@@ -205,17 +217,17 @@ def build_decisive_witness(
     validate_spn_witness(
         parameters,
         rounds,
-        decisive.boundary,
-        decisive.decisive_vector,
+        boundary,
+        input_vector,
         target_index,
         steps,
     )
     hex_width = (parameters.block_size + 3) // 4
     return {
         "verified": True,
-        "boundary": asdict(decisive.boundary),
-        "input_vector": decisive.decisive_vector,
-        "input_hex": f"{decisive.decisive_vector:0{hex_width}x}",
+        "boundary": asdict(boundary),
+        "input_vector": input_vector,
+        "input_hex": f"{input_vector:0{hex_width}x}",
         "target_index": target_index,
         "steps": [
             {
@@ -229,8 +241,87 @@ def build_decisive_witness(
     }
 
 
+def build_decisive_witness(
+    parameters: SPNParameters,
+    rounds: int,
+    result: SearchResult,
+    target_index: int,
+    *,
+    time_limit: float | None,
+    output_flag: bool,
+) -> dict[str, Any] | None:
+    """为最外层 Stopping Rule 1 导出可审计的 CBDP 轨迹。"""
+    if result.reason is not StopReason.K_REACHABLE:
+        return None
+    decisive = result.trace[-1]
+    if not isinstance(decisive.boundary, SPNBoundary):
+        raise TypeError("决定性轨迹不是 SPN 边界")
+    if decisive.decisive_vector is None:
+        raise RuntimeError("Stopping Rule 1 缺少决定性 K 向量")
+    return build_cbdp_witness(
+        parameters,
+        rounds,
+        decisive.boundary,
+        decisive.decisive_vector,
+        target_index,
+        time_limit=time_limit,
+        output_flag=output_flag,
+    )
+
+
+def build_bypass_obstruction_witnesses(
+    parameters: SPNParameters,
+    rounds: int,
+    result: SearchResult,
+    target_index: int,
+    *,
+    time_limit: float | None,
+    output_flag: bool,
+) -> list[dict[str, Any]]:
+    """为记录到的 K-BDPT 旁路阻塞点逐一重放 CBDP 轨迹。"""
+    hex_width = (parameters.block_size + 3) // 4
+    witnesses: list[dict[str, Any]] = []
+    for entry in result.trace:
+        if entry.bypass_obstruction_vector is None:
+            continue
+        if not isinstance(entry.boundary, SPNBoundary):
+            raise TypeError("旁路来源不是 SPN 边界")
+        if not isinstance(entry.bypass_obstruction_boundary, SPNBoundary):
+            raise TypeError("旁路阻塞点不是 SPN 边界")
+        witnesses.append(
+            {
+                "source_secret_key_index": entry.secret_key_index,
+                "source_boundary": asdict(entry.boundary),
+                "source_l_prime": [
+                    {
+                        "vector": vector,
+                        "hex": f"{vector:0{hex_width}x}",
+                    }
+                    for vector in entry.bypass_l_prime or ()
+                ],
+                "bypass_parity": entry.bypass_parity,
+                "bypass_reason": entry.bypass_reason,
+                "obstruction": build_cbdp_witness(
+                    parameters,
+                    rounds,
+                    entry.bypass_obstruction_boundary,
+                    entry.bypass_obstruction_vector,
+                    target_index,
+                    time_limit=time_limit,
+                    output_flag=output_flag,
+                ),
+            }
+        )
+    return witnesses
+
+
 def main() -> int:
     args = parse_args()
+    if args.algorithm == "bdpt" and args.key_bit_order != "ascending":
+        raise ValueError("--key-bit-order 只适用于 K-BDPT 模式")
+    key_bit_order = (
+        args.key_bit_order if args.algorithm != "bdpt" else None
+    )
     config = load_config(args.experiment)
     parameters = PARAMETERS[str(config["cipher"])]
     rounds = int(config["rounds"])
@@ -263,6 +354,8 @@ def main() -> int:
     algorithm_suffix = (
         "" if args.algorithm == "bdpt" else f"_{args.algorithm.replace('-', '_')}"
     )
+    if key_bit_order is not None:
+        algorithm_suffix += f"_key_{key_bit_order}"
     output = args.output or Path(
         f"output/results/table5_{args.experiment}{algorithm_suffix}.json"
     )
@@ -278,6 +371,8 @@ def main() -> int:
             )
         if payload.get("constant_semantics", {"mode": "unknown"}) != constant_semantics:
             raise ValueError("已有检查点的常量语义与当前命令不一致")
+        if payload.get("key_bit_order") != key_bit_order:
+            raise ValueError("已有检查点的轮密钥比特顺序与当前命令不一致")
         if payload.get("config") != config:
             raise ValueError(
                 "已有检查点由旧配置生成，请移动旧文件或使用新的 --output 路径"
@@ -289,6 +384,7 @@ def main() -> int:
             parameters,
             args.algorithm,
             constant_semantics,
+            key_bit_order,
         )
 
     targets = (
@@ -300,10 +396,18 @@ def main() -> int:
         raise ValueError("目标位超出密码状态范围")
 
     if args.algorithm == "k-bdpt":
-        parts = spn_k_bdpt_parts(parameters, rounds)
+        parts = spn_k_bdpt_parts(
+            parameters,
+            rounds,
+            key_bit_order=args.key_bit_order,
+        )
         search = search_k_bdpt
     elif args.algorithm == "k-bdpt-literal":
-        parts = spn_k_bdpt_parts(parameters, rounds)
+        parts = spn_k_bdpt_parts(
+            parameters,
+            rounds,
+            key_bit_order=args.key_bit_order,
+        )
         search = search_k_bdpt_literal
     else:
         parts = spn_search_parts(parameters, rounds)
@@ -311,9 +415,15 @@ def main() -> int:
 
     for target_index in targets:
         key = str(target_index)
-        if key in payload["results"]:
+        existing_result = payload["results"].get(key)
+        if existing_result is not None and (
+            not args.record_witness
+            or has_recorded_witness(existing_result, args.algorithm)
+        ):
             print(f"跳过已完成目标位 {target_index}")
             continue
+        if existing_result is not None:
+            print(f"目标位 {target_index} 缺少审计证据，重新执行")
         oracle = CachedSuffixOracle(
             SPNGurobiOracle(
                 parameters,
@@ -326,7 +436,16 @@ def main() -> int:
         write_checkpoint(output, payload)
         print(f"开始目标位 {target_index}，正在执行首个后缀查询……", flush=True)
         started = time.perf_counter()
-        result = search(initial_state, target_index, parts, oracle)
+        if args.algorithm == "bdpt":
+            result = search(initial_state, target_index, parts, oracle)
+        else:
+            result = search(
+                initial_state,
+                target_index,
+                parts,
+                oracle,
+                record_bypass_provenance=args.record_witness,
+            )
         payload["results"][key] = {
             "parity": result.parity.value,
             "reason": result.reason.value,
@@ -346,6 +465,17 @@ def main() -> int:
                     output_flag=args.gurobi_log,
                 )
             )
+            if args.algorithm != "bdpt":
+                payload["results"][key]["bypass_obstruction_witnesses"] = (
+                    build_bypass_obstruction_witnesses(
+                        parameters,
+                        rounds,
+                        result,
+                        target_index,
+                        time_limit=args.time_limit,
+                        output_flag=args.gurobi_log,
+                    )
+                )
         payload["running_target"] = None
         update_summary(payload, parameters)
         write_checkpoint(output, payload)

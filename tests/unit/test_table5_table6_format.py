@@ -3,6 +3,7 @@ import pytest
 from experiments.reproduce_table5_spn import (
     PAPER_LAYOUTS,
     PARAMETERS,
+    has_recorded_witness,
     load_config as load_table5_config,
     update_summary as update_table5_summary,
 )
@@ -73,6 +74,22 @@ def test_present60_uses_the_specification_x63_to_x0_order() -> None:
     assert config["state_order"] == "x63_to_x0"
     assert active == frozenset(range(4, 64))
     assert balanced == {0, 4, 8, 12}
+
+
+def test_k_bdpt_resume_requires_bypass_provenance_when_recording_witness() -> None:
+    assert not has_recorded_witness({}, "k-bdpt")
+    assert not has_recorded_witness(
+        {"decisive_cbdp_witness": None},
+        "k-bdpt",
+    )
+    assert has_recorded_witness(
+        {
+            "decisive_cbdp_witness": None,
+            "bypass_obstruction_witnesses": [],
+        },
+        "k-bdpt",
+    )
+    assert has_recorded_witness({"decisive_cbdp_witness": None}, "bdpt")
 
 
 @pytest.mark.parametrize("experiment", ["lblock63", "lblock62"])
