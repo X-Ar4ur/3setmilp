@@ -18,7 +18,7 @@ from three_set_milp.ciphers.spn import propagate_public_permutation
 from three_set_milp.core.bdpt import BDPTState
 from three_set_milp.core.bitvector import unit_vector
 from three_set_milp.milp.spn import SPNBoundary
-from three_set_milp.search.spn import spn_k_bdpt_parts
+from three_set_milp.search.spn import spn_k_bdpt_parts, spn_search_parts
 
 
 def test_present_constants_and_sbox_bit_order() -> None:
@@ -115,3 +115,26 @@ def test_k_bdpt_splits_every_round_key_bit(
 def test_k_bdpt_rejects_unknown_key_bit_order() -> None:
     with pytest.raises(ValueError, match="轮密钥比特顺序"):
         spn_k_bdpt_parts(PRESENT, rounds=1, key_bit_order="middle")
+
+
+def test_main_bdpt_key_treatment_switch_only_suppresses_rule4_k() -> None:
+    input_state = BDPTState(width=64, l=frozenset({0}))
+    paper_round_end = spn_search_parts(PRESENT, rounds=1)[-1]
+    diagnostic_round_end = spn_search_parts(
+        PRESENT,
+        rounds=1,
+        key_treatment="ignore-rule4",
+    )[-1]
+
+    paper_output = paper_round_end.propagate(input_state)
+    diagnostic_output = diagnostic_round_end.propagate(input_state)
+
+    assert paper_output.k == frozenset(unit_vector(index, 64) for index in range(64))
+    assert paper_output.l == frozenset({0})
+    assert diagnostic_output.k == frozenset()
+    assert diagnostic_output.l == frozenset({0})
+
+
+def test_main_bdpt_rejects_unknown_key_treatment() -> None:
+    with pytest.raises(ValueError, match="密钥处理方式"):
+        spn_search_parts(PRESENT, rounds=1, key_treatment="unknown")

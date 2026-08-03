@@ -61,6 +61,12 @@ ALGORITHM_VERSIONS = {
     "k-bdpt": "followup_algorithm1_example_semantics_v4",
     "k-bdpt-literal": "followup_algorithm1_literal_v2",
 }
+KEY_TREATMENT_NOTES = {
+    "paper": "按主论文 Rule 4 从 L 生成 K",
+    "ignore-rule4": (
+        "诊断偏离：轮密钥处不执行 Rule 4 的 L 到 K 生成，仅传播公开置换"
+    ),
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -103,6 +109,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--key-treatment",
+        choices=("paper", "ignore-rule4"),
+        default="paper",
+        help=(
+            "主论文 Rule 4 密钥处理，或忽略 L 到 K 生成的对照诊断；"
+            "后者不属于论文算法且仅适用于 --algorithm bdpt"
+        ),
+    )
+    parser.add_argument(
         "--key-bit-order",
         choices=("ascending", "descending"),
         default="ascending",
@@ -127,6 +142,7 @@ def initial_payload(
     algorithm: str,
     constant_semantics: dict[str, str],
     key_bit_order: str | None,
+    key_treatment: str | None,
 ) -> dict[str, Any]:
     import gurobipy as gp
 
@@ -137,6 +153,12 @@ def initial_payload(
         "algorithm_version": ALGORITHM_VERSIONS[algorithm],
         "constant_semantics": constant_semantics,
         "key_bit_order": key_bit_order,
+        "key_treatment": key_treatment,
+        "key_treatment_note": (
+            KEY_TREATMENT_NOTES[key_treatment]
+            if key_treatment is not None
+            else None
+        ),
         "environment": {
             "python": sys.version,
             "platform": platform.platform(),
@@ -319,9 +341,12 @@ def main() -> int:
     args = parse_args()
     if args.algorithm == "bdpt" and args.key_bit_order != "ascending":
         raise ValueError("--key-bit-order 只适用于 K-BDPT 模式")
+    if args.algorithm != "bdpt" and args.key_treatment != "paper":
+        raise ValueError("--key-treatment ignore-rule4 只适用于主论文 BDPT 模式")
     key_bit_order = (
         args.key_bit_order if args.algorithm != "bdpt" else None
     )
+    key_treatment = args.key_treatment if args.algorithm == "bdpt" else None
     config = load_config(args.experiment)
     parameters = PARAMETERS[str(config["cipher"])]
     rounds = int(config["rounds"])
@@ -356,6 +381,8 @@ def main() -> int:
     )
     if key_bit_order is not None:
         algorithm_suffix += f"_key_{key_bit_order}"
+    if key_treatment == "ignore-rule4":
+        algorithm_suffix += "_bdpt_ignore_rule4"
     output = args.output or Path(
         f"output/results/table5_{args.experiment}{algorithm_suffix}.json"
     )
@@ -373,6 +400,9 @@ def main() -> int:
             raise ValueError("已有检查点的常量语义与当前命令不一致")
         if payload.get("key_bit_order") != key_bit_order:
             raise ValueError("已有检查点的轮密钥比特顺序与当前命令不一致")
+        legacy_key_treatment = "paper" if args.algorithm == "bdpt" else None
+        if payload.get("key_treatment", legacy_key_treatment) != key_treatment:
+            raise ValueError("已有检查点的轮密钥处理方式与当前命令不一致")
         if payload.get("config") != config:
             raise ValueError(
                 "已有检查点由旧配置生成，请移动旧文件或使用新的 --output 路径"
@@ -385,6 +415,7 @@ def main() -> int:
             args.algorithm,
             constant_semantics,
             key_bit_order,
+            key_treatment,
         )
 
     targets = (
@@ -410,7 +441,11 @@ def main() -> int:
         )
         search = search_k_bdpt_literal
     else:
-        parts = spn_search_parts(parameters, rounds)
+        parts = spn_search_parts(
+            parameters,
+            rounds,
+            key_treatment=args.key_treatment,
+        )
         search = search_bdpt
 
     for target_index in targets:

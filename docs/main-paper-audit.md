@@ -46,3 +46,25 @@
 - 若轨迹核验成功，则按主论文 Stopping Rule 1，该目标位必然是 unknown，需要继续检查论文实验是否使用了正文未说明的密钥处理方式；
 - 在上述证据闭合前，不采用后续论文的 K-BDPT 作为修复。
 
+## 5. Stopping Rule 1 对照与 Rule 4 诊断
+
+主论文第 411 页的 Stopping Rule 1 规定：在局部后缀 `E_i,j` 的输入 BDPT
+`D_{K_i,j,L_i,j}` 上，只要存在任意 `k in K_i,j`，使 CBDP trail
+`k -> e_m` 存在，就立即停止并把第 `m` 个输出位判为 unknown。Algorithm 2
+第 4--9 行给出了相同实现。
+
+项目的 `search_bdpt()` 在每个局部边界先遍历当前 `K`。后缀 oracle 返回
+`FEASIBLE` 时，代码立即返回 `Parity.UNKNOWN/K_REACHABLE`；如果全部不可达，
+才清空 `K`、剪枝 `L` 并继续执行第 19 行的 BDPT 传播。因此当前 Stopping
+Rule 1 的量词、边界、CBDP 可达条件和返回值均与论文一致。向量排序和缓存
+只改变执行顺序及耗时，不改变判定。
+
+Rectangle 的新增 11 位都在轮密钥 Rule 4 从 `L` 生成 `K` 后触发该规则。
+为区分“Stopping Rule 1 实现错误”和“作者实验采用了未公开的密钥处理”，
+Table 5 脚本增加 `--key-treatment ignore-rule4`。该模式仍执行相同的 CBDP
+剪枝、Stopping Rule 1 和 BDPT S 盒传播，只在轮末跳过 Rule 4 的 `L -> K`
+生成。JSON 会记录 `key_treatment=ignore-rule4` 以及诊断偏离说明，默认
+`paper` 模式不变。
+
+该对照模式不是论文复现结果。若它恰好恢复全部 11 位，只能说明差异被
+定位到密钥 Rule 4 路径，不能据此认定应从正式实现中删除 Rule 4。

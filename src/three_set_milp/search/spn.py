@@ -17,14 +17,27 @@ from .bdpt_search import SearchPart
 
 
 KeyBitOrder = Literal["ascending", "descending"]
+KeyTreatment = Literal["paper", "ignore-rule4"]
 
 
 def spn_search_parts(
-    parameters: SPNParameters, rounds: int
+    parameters: SPNParameters,
+    rounds: int,
+    *,
+    key_treatment: KeyTreatment = "paper",
 ) -> tuple[SearchPart, ...]:
-    """按每轮全部 S 盒和轮末置换/密钥步骤生成局部序列。"""
+    """按每轮全部 S 盒和轮末置换/密钥步骤生成局部序列。
+
+    ``ignore-rule4`` 仅用于定位论文 Table 5 差异，不属于主论文算法。
+    """
     if rounds <= 0:
         raise ValueError("轮数必须为正数")
+    if key_treatment == "paper":
+        round_end_propagate = propagate_key_and_permutation
+    elif key_treatment == "ignore-rule4":
+        round_end_propagate = propagate_public_permutation
+    else:
+        raise ValueError("密钥处理方式只能是 paper 或 ignore-rule4")
     parts: list[SearchPart] = []
     sbox_count = len(parameters.sbox_groups)
     for round_index in range(rounds):
@@ -43,7 +56,7 @@ def spn_search_parts(
             SearchPart(
                 boundary=SPNBoundary(round_index, sbox_count),
                 propagate=partial(
-                    propagate_key_and_permutation,
+                    round_end_propagate,
                     parameters=parameters,
                 ),
             )

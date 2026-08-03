@@ -97,6 +97,26 @@ done
 python experiments/reproduce_table5_spn.py present60 --targets 4 --record-witness --output output/results/table5_present60_bdpt_target4_witness.json
 ```
 
+为定位 Rectangle 新增平衡位是否全部受轮密钥 Rule 4 影响，可运行显式对照模式。该模式只保留公开置换、不从 `L` 生成 `K`，因此不属于主论文 Algorithm 2，结果只能用于诊断：
+
+```console
+python experiments/reproduce_table5_spn.py rectangle60 \
+  --key-treatment ignore-rule4 \
+  --targets 10 12 17 \
+  --record-witness \
+  --output output/results/table5_rectangle60_bdpt_ignore_rule4_smoke.json
+```
+
+若上述三位均变为 balanced，再测试论文相对 CBDP 新增的全部 11 位：
+
+```console
+python experiments/reproduce_table5_spn.py rectangle60 \
+  --key-treatment ignore-rule4 \
+  --targets 10 12 17 19 20 24 25 28 29 30 31 \
+  --record-witness \
+  --output output/results/table5_rectangle60_bdpt_ignore_rule4_added11.json
+```
+
 复现 Table 6 的 LBlock 实验：
 
 ```console

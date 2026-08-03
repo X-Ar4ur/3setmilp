@@ -32,6 +32,31 @@ def test_stopping_rule_1_returns_unknown() -> None:
     assert result.trace[-1].decisive_vector == 0b11
 
 
+def test_stopping_rule_1_checks_k_until_any_vector_reaches() -> None:
+    initial = BDPTState(
+        width=2,
+        k=frozenset({0b01, 0b10}),
+        l=frozenset({0b00}),
+    )
+    queried: list[int] = []
+
+    def oracle(boundary: object, vector: int, target: int) -> bool:
+        queried.append(vector)
+        return vector == 0b10
+
+    result = search_bdpt(
+        initial,
+        0,
+        [SearchPart(Boundary(0), _identity)],
+        oracle,
+    )
+
+    assert result.parity is Parity.UNKNOWN
+    assert result.reason is StopReason.K_REACHABLE
+    assert result.trace[-1].decisive_vector == 0b10
+    assert queried == [0b01, 0b10]
+
+
 def test_stopping_rule_2_returns_zero() -> None:
     initial = BDPTState(width=2, l=frozenset({0b10}))
     part = SearchPart(Boundary(0), _identity)
