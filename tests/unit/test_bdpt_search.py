@@ -207,8 +207,16 @@ def test_k_bdpt_records_failed_bypass_provenance() -> None:
             lambda state: xor_secret_key(state, 0),
             secret_key_index=0,
         ),
-        SearchPart(child_boundary, promote_l_to_k),
-        SearchPart(obstruction_boundary, _identity),
+        SearchPart(
+            child_boundary,
+            promote_l_to_k,
+            secret_key_index=1,
+        ),
+        SearchPart(
+            obstruction_boundary,
+            _identity,
+            secret_key_index=2,
+        ),
     ]
 
     def oracle(boundary: object, vector: int, target: int) -> bool:
@@ -232,6 +240,8 @@ def test_k_bdpt_records_failed_bypass_provenance() -> None:
     assert key_trace.bypass_l_prime == (0b011,)
     assert key_trace.bypass_obstruction_boundary == obstruction_boundary
     assert key_trace.bypass_obstruction_vector == 0b011
+    assert key_trace.bypass_obstruction_checked_key_index == 2
+    assert key_trace.bypass_obstruction_generated_by_key_index == 1
 
 
 def test_k_generated_by_one_part_is_checked_at_next_boundary() -> None:

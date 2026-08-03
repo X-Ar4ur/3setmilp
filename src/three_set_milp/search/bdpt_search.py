@@ -48,6 +48,8 @@ class TraceEntry:
     bypass_l_prime: tuple[int, ...] | None = None
     bypass_obstruction_boundary: Hashable | None = None
     bypass_obstruction_vector: int | None = None
+    bypass_obstruction_checked_key_index: int | None = None
+    bypass_obstruction_generated_by_key_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +258,8 @@ def _search_bdpt(
         bypass_l_prime: tuple[int, ...] | None = None
         bypass_obstruction_boundary: Hashable | None = None
         bypass_obstruction_vector: int | None = None
+        bypass_obstruction_checked_key_index: int | None = None
+        bypass_obstruction_generated_by_key_index: int | None = None
         if enable_key_bypass and part.secret_key_index is not None:
             bit_mask = unit_vector(part.secret_key_index, current.width)
             shifted_l = frozenset(
@@ -284,6 +288,15 @@ def _search_bdpt(
                     obstruction = bypass_result.trace[-1]
                     bypass_obstruction_boundary = obstruction.boundary
                     bypass_obstruction_vector = obstruction.decisive_vector
+                    bypass_obstruction_checked_key_index = (
+                        obstruction.secret_key_index
+                    )
+                    if len(bypass_result.trace) >= 2:
+                        generator = bypass_result.trace[-2]
+                        if generator.k_after_propagation:
+                            bypass_obstruction_generated_by_key_index = (
+                                generator.secret_key_index
+                            )
             propagated = pruned if key_bypassed else part.propagate(pruned)
         else:
             propagated = part.propagate(pruned)
@@ -313,6 +326,12 @@ def _search_bdpt(
                 bypass_l_prime=bypass_l_prime,
                 bypass_obstruction_boundary=bypass_obstruction_boundary,
                 bypass_obstruction_vector=bypass_obstruction_vector,
+                bypass_obstruction_checked_key_index=(
+                    bypass_obstruction_checked_key_index
+                ),
+                bypass_obstruction_generated_by_key_index=(
+                    bypass_obstruction_generated_by_key_index
+                ),
             )
         )
         current = propagated

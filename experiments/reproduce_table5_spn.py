@@ -58,7 +58,7 @@ PAPER_LAYOUTS = {
 EXPERIMENTS = ("present60", "present63", "rectangle60")
 ALGORITHM_VERSIONS = {
     "bdpt": None,
-    "k-bdpt": "followup_algorithm1_example_semantics_v4",
+    "k-bdpt": "followup_algorithm1_example_semantics_v5",
     "k-bdpt-literal": "followup_algorithm1_literal_v2",
 }
 KEY_TREATMENT_NOTES = {
@@ -323,15 +323,23 @@ def build_bypass_obstruction_witnesses(
                 ],
                 "bypass_parity": entry.bypass_parity,
                 "bypass_reason": entry.bypass_reason,
-                "obstruction": build_cbdp_witness(
-                    parameters,
-                    rounds,
-                    entry.bypass_obstruction_boundary,
-                    entry.bypass_obstruction_vector,
-                    target_index,
-                    time_limit=time_limit,
-                    output_flag=output_flag,
-                ),
+                "obstruction": {
+                    "checked_key_index": (
+                        entry.bypass_obstruction_checked_key_index
+                    ),
+                    "generated_by_key_index": (
+                        entry.bypass_obstruction_generated_by_key_index
+                    ),
+                    **build_cbdp_witness(
+                        parameters,
+                        rounds,
+                        entry.bypass_obstruction_boundary,
+                        entry.bypass_obstruction_vector,
+                        target_index,
+                        time_limit=time_limit,
+                        output_flag=output_flag,
+                    ),
+                },
             }
         )
     return witnesses

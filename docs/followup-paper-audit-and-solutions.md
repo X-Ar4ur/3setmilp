@@ -74,11 +74,13 @@
 
 - `bypass_l_prime`：Theorem 3 的完整 \(L'_i\)，它也是随后 Rule 1 生成 K 的候选向量集合；
 - `bypass_obstruction_boundary` 与 `bypass_obstruction_vector`：嵌套原始 BDPT 首个触发 Stopping Rule 1 的 CBDP 输入；
+- `bypass_obstruction_checked_key_index`：内层 Stopping Rule 1 检查阻塞 K 时即将处理的标量密钥位；若下一局部函数不是密钥异或则为 `null`；
+- `bypass_obstruction_generated_by_key_index`：内层阻塞 K 由紧邻前一步的哪个标量密钥位生成；
 - `bypass_obstruction_witnesses`：对上述输入重新求解并逐步验证的 CBDP trail。
 
 新输出会使用算法版本字段和轮密钥扫描顺序拒绝混用旧 K-BDPT 检查点。此前 `target=4` 的 JSON 因此不能作为后续论文的最终复现证据，必须重新运行。
 
-若同一 v4 检查点先在未使用 `--record-witness` 的情况下完成，之后加上该参数时脚本会自动重跑缺少证据的目标位，而不会错误地跳过它。
+若同一 v5 检查点先在未使用 `--record-witness` 的情况下完成，之后加上该参数时脚本会自动重跑缺少证据的目标位，而不会错误地跳过它。
 
 ### P3：`c` 的语义不能被擅自改成某个 0/1 赋值
 
@@ -103,7 +105,7 @@ python experiments/reproduce_table5_spn.py present60 \
 
 `0101` 按输入模式中四个 `c` 的论文打印顺序解释。省略参数时，仍使用论文标准的未知常量初态。该功能只用于交叉验证，不替代标准 Table 6 复现。
 
-### P4：PRESENT 的标量轮密钥顺序未由后续论文指定
+### P4：PRESENT/RECTANGLE 的标量轮密钥顺序未由后续论文指定
 
 **证据。** 论文给出泛化的“Xor with The Secret Key”函数，但在第 301--302 页没有说明 64 位 PRESENT 子密钥拆成标量函数的顺序。
 
@@ -126,6 +128,12 @@ python experiments/reproduce_table5_spn.py present60 \
 
 **解决方案。** 本项目把每个目标位的耗时、oracle 调用数、算法版本、常量语义、轮密钥扫描顺序及完整剪枝/旁路轨迹写入 JSON。带 `--record-witness` 的 K-BDPT 结果还会保存失败旁路的阻塞 CBDP witness。性能比较只在相同服务器、Gurobi 版本、目标位和算法模式下进行，不能直接拿论文平台的总时间作一一结论。
 
+### P6：RECTANGLE-60 目标位 10 在两种自然密钥顺序下均被内层 BDPT 阻塞
+
+**证据。** 升序模式成功旁路 75 个标量密钥位，在第二个密钥层的 bit 11 首次失败；降序模式成功旁路 84 个标量密钥位，在同一密钥层的 bit 43 首次失败。两次失败都由内层原始 BDPT 在边界 `(round=3, part=0)` 触发 Stopping Rule 1，且决定性 CBDP witness 均已重放验证。升序和降序分别使用 528 与 1303 次 oracle 调用，均不是超时或求解状态不确定造成的结果。
+
+**结论。** K-BDPT 入口和 Theorem 3 旁路均已实际执行，简单反转扫描顺序不能复现 Table 6。当前证据仍不能排除论文使用了未公开的其他标量分解顺序。v5 轨迹新增内层阻塞 K 的生成密钥位和检查密钥位；下一步先用单目标复现实验定位这两个索引，再决定是否需要支持显式自定义顺序，不能静默选择有利排列。
+
 ## 4. 已增加的验证
 
 - 后续论文 Example 2：默认 K-BDPT 返回 zero，并确实旁路该密钥 bit。
@@ -133,9 +141,9 @@ python experiments/reproduce_table5_spn.py present60 \
 - 已知常量初态：在 4 bit 穷举中，与精确 cube 的 BDPT 状态完全一致。
 - 常量值字符串：按显式密码 layout 解析，避免把论文打印顺序误当作内部 bit 顺序。
 - 轮密钥顺序：两轮 PRESENT 部件序列分别固定验证 `0 -> 63` 与 `63 -> 0`，并验证首尾局部函数确实作用于对应密钥 bit。
-- 失败旁路来源：纯 Python 回归样例验证 `L'_i`、嵌套 BDPT 的阻塞边界和决定性 K 向量会被准确记录。
+- 失败旁路来源：纯 Python 回归样例验证 `L'_i`、嵌套 BDPT 的阻塞边界、决定性 K 向量及其生成/检查密钥位会被准确记录。
 
-本地测试：`86 passed, 12 skipped`；跳过项均因本机没有 `gurobipy`。Gurobi 端到端结果仍需服务器验证。
+本地测试：`89 passed, 12 skipped`；跳过项均因本机没有 `gurobipy`。Gurobi 端到端结果仍需服务器验证。
 
 ## 5. 下一次服务器实验顺序
 
