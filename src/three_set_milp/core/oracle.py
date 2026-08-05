@@ -8,6 +8,17 @@ from .bitvector import unit_vector, validate_vector, validate_width
 from .order import reduce_k
 
 
+def append_known_zero_bits(state: BDPTState, count: int) -> BDPTState:
+    """在高索引端附加已知为 0 的辅助状态位。"""
+    if count <= 0:
+        raise ValueError("附加的辅助位数量必须为正数")
+    return BDPTState(
+        width=state.width + count,
+        k=state.k,
+        l=state.l,
+    )
+
+
 def monomial_value(value: int, exponent: int, width: int) -> int:
     """计算二进制点 ``value`` 上的单项式 ``x^exponent``。"""
     validate_vector(value, width)

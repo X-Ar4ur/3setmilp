@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from three_set_milp.core.bdpt import BDPTState
+from three_set_milp.core.bitvector import validate_vector
 from three_set_milp.core.propagation import (
     permute_state,
     propagate_local_sbox,
@@ -79,6 +80,27 @@ def propagate_public_permutation(
     if state.width != parameters.block_size:
         raise ValueError("BDPT 状态宽度与 SPN 参数不一致")
     return permute_state(state, parameters.permutation)
+
+
+def propagate_known_key_and_permutation(
+    state: BDPTState,
+    parameters: SPNParameters,
+    round_key: int,
+) -> BDPTState:
+    """传播公开置换和一个取值已知的轮密钥。"""
+    if state.width != parameters.block_size:
+        raise ValueError("BDPT 状态宽度与 SPN 参数不一致")
+    validate_vector(round_key, parameters.block_size)
+    current = permute_state(state, parameters.permutation)
+    for index in range(parameters.block_size):
+        if (round_key >> index) & 1:
+            current = xor_known_constant(current, index)
+    return current
+
+
+def xor_known_constant(state: BDPTState, index: int) -> BDPTState:
+    """传播状态位与已知常量 1 的异或。"""
+    return propagate_local_sbox(state, (index,), (1, 0))
 
 
 def propagate_round(state: BDPTState, parameters: SPNParameters) -> BDPTState:

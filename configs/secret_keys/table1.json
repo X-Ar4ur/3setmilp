@@ -1,0 +1,165 @@
+{
+  "paper_platform": {
+    "cpu": "Intel Core i5-9300 @ 3.98GHz",
+    "memory_gb": 32,
+    "gurobi": "8.1.0"
+  },
+  "round_extension": {
+    "reference": "[WLV+14]",
+    "families": ["SPECK", "SIMON(102)"],
+    "added_rounds_before_distinguisher": 1,
+    "directly_searchable_by_k_bdpt": false
+  },
+  "rows": [
+    {
+      "cipher": "SPECK32",
+      "data_log2": 31,
+      "rounds_reported": 7,
+      "constant_bits": 1,
+      "distinguishers": 2,
+      "time": "3.5m",
+      "reference": "[HW19, SWW17]"
+    },
+    {
+      "cipher": "SPECK32",
+      "data_log2": 30,
+      "rounds_reported": 7,
+      "constant_bits": 1,
+      "distinguishers": 1,
+      "time": "1h5m",
+      "reference": "Sect. 4.1"
+    },
+    {
+      "cipher": "SPECK48",
+      "data_log2": 45,
+      "rounds_reported": 7,
+      "constant_bits": 1,
+      "distinguishers": 1,
+      "time": "<6m",
+      "reference": "[SWW17]"
+    },
+    {
+      "cipher": "SPECK48",
+      "data_log2": 45,
+      "rounds_reported": 7,
+      "constant_bits": 1,
+      "distinguishers": 2,
+      "time": "12h57m",
+      "reference": "Sect. 4.1"
+    },
+    {
+      "cipher": "SPECK64",
+      "data_log2": 61,
+      "rounds_reported": 7,
+      "constant_bits": 1,
+      "distinguishers": 1,
+      "time": "<6m",
+      "reference": "[SWW17]"
+    },
+    {
+      "cipher": "SPECK64",
+      "data_log2": 61,
+      "rounds_reported": 7,
+      "constant_bits": 1,
+      "distinguishers": 2,
+      "time": "17h40m",
+      "reference": "Sect. 4.1"
+    },
+    {
+      "cipher": "SPECK96",
+      "data_log2": 93,
+      "rounds_reported": 7,
+      "constant_bits": 1,
+      "distinguishers": 1,
+      "time": "<6m",
+      "reference": "[SWW17]"
+    },
+    {
+      "cipher": "SPECK96",
+      "data_log2": 93,
+      "rounds_reported": 7,
+      "constant_bits": 1,
+      "distinguishers": 2,
+      "time": "7d10h25m",
+      "reference": "Sect. 4.1"
+    },
+    {
+      "cipher": "KATAN/KTANTAN64",
+      "data_log2": 63,
+      "rounds_reported": "72.3",
+      "constant_bits": 2,
+      "distinguishers": 1,
+      "time": "18m",
+      "reference": "[HW19]"
+    },
+    {
+      "cipher": "KATAN/KTANTAN64",
+      "data_log2": 63,
+      "rounds_reported": "73.6",
+      "constant_bits": 1,
+      "distinguishers": 1,
+      "time": "44h24m",
+      "reference": "Sect. 4.2"
+    },
+    {
+      "cipher": "SIMON(102)32",
+      "data_log2": 31,
+      "rounds_reported": 20,
+      "constant_bits": 3,
+      "constant_values_determined": false,
+      "distinguishers": 32,
+      "time": "25s",
+      "reference": "[HW19]"
+    },
+    {
+      "cipher": "SIMON(102)32",
+      "data_log2": 31,
+      "rounds_reported": 20,
+      "constant_bits": 3,
+      "constant_values_determined": true,
+      "distinguishers": 32,
+      "time": "22m",
+      "reference": "Sect. 4.3"
+    },
+    {
+      "cipher": "SIMON(102)48",
+      "data_log2": 47,
+      "rounds_reported": 28,
+      "constant_bits": 3,
+      "constant_values_determined": false,
+      "distinguishers": 48,
+      "time": "9.3s",
+      "reference": "[HW19]"
+    },
+    {
+      "cipher": "SIMON(102)48",
+      "data_log2": 47,
+      "rounds_reported": 28,
+      "constant_bits": 3,
+      "constant_values_determined": true,
+      "distinguishers": 48,
+      "time": "1h10m",
+      "reference": "Sect. 4.3"
+    },
+    {
+      "cipher": "SIMON(102)64",
+      "data_log2": 63,
+      "rounds_reported": 36,
+      "constant_bits": 3,
+      "constant_values_determined": false,
+      "distinguishers": 64,
+      "time": "1.1h",
+      "reference": "[HW19]"
+    },
+    {
+      "cipher": "SIMON(102)64",
+      "data_log2": 63,
+      "rounds_reported": 36,
+      "constant_bits": 3,
+      "constant_values_determined": true,
+      "distinguishers": 64,
+      "time": "3h27m",
+      "reference": "Sect. 4.3"
+    }
+  ]
+}

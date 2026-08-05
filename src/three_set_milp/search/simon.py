@@ -1,17 +1,23 @@
 """SIMON 的 Algorithm 2 局部序列与 Gurobi 后缀 oracle。"""
 
 from functools import partial
+from typing import Literal
 
 from three_set_milp.ciphers.simon import (
     SimonParameters,
     propagate_core,
     propagate_key_and_swap,
+    propagate_public_swap,
 )
 from three_set_milp.core.bdpt import BDPTState
+from three_set_milp.core.propagation import xor_secret_key
 from three_set_milp.milp.gurobi_backend import SolveStatus
 from three_set_milp.milp.simon import SimonBoundary, SimonSuffixModel
 
 from .bdpt_search import SearchPart
+
+
+KeyBitOrder = Literal["ascending", "descending"]
 
 
 def simon_search_parts(
@@ -38,6 +44,61 @@ def simon_search_parts(
                 boundary=SimonBoundary(round_index, parameters.word_size),
                 propagate=partial(
                     propagate_key_and_swap,
+                    parameters=parameters,
+                ),
+            )
+        )
+    return tuple(parts)
+
+
+def simon_k_bdpt_parts(
+    parameters: SimonParameters,
+    rounds: int,
+    *,
+    key_bit_order: KeyBitOrder = "ascending",
+) -> tuple[SearchPart, ...]:
+    """把每轮密钥 XOR 拆成标量函数，供后续论文 Algorithm 1 使用。"""
+    if rounds <= 0:
+        raise ValueError("轮数必须为正数")
+    if key_bit_order == "ascending":
+        key_indices = range(parameters.word_size)
+    elif key_bit_order == "descending":
+        key_indices = range(parameters.word_size - 1, -1, -1)
+    else:
+        raise ValueError("轮密钥比特顺序只能是 ascending 或 descending")
+
+    parts: list[SearchPart] = []
+    width = parameters.word_size
+    for round_index in range(rounds):
+        for part_index in range(width):
+            parts.append(
+                SearchPart(
+                    boundary=SimonBoundary(round_index, part_index),
+                    propagate=partial(
+                        propagate_core,
+                        parameters=parameters,
+                        output_index=part_index,
+                    ),
+                )
+            )
+        key_boundary = SimonBoundary(round_index, width)
+        for key_index in key_indices:
+            parts.append(
+                SearchPart(
+                    boundary=key_boundary,
+                    propagate=partial(
+                        xor_secret_key,
+                        index=width + key_index,
+                    ),
+                    secret_key_index=width + key_index,
+                    secret_key_label=f"k^{round_index}_{key_index}",
+                )
+            )
+        parts.append(
+            SearchPart(
+                boundary=key_boundary,
+                propagate=partial(
+                    propagate_public_swap,
                     parameters=parameters,
                 ),
             )

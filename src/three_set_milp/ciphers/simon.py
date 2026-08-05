@@ -32,13 +32,49 @@ class SimonParameters:
     def block_size(self) -> int:
         return 2 * self.word_size
 
+    @property
+    def paper_print_indices(self) -> tuple[int, ...]:
+        """论文先打印左字、再打印右字，且各字从高位到低位。"""
+        width = self.word_size
+        return tuple(reversed(range(width))) + tuple(
+            reversed(range(width, 2 * width))
+        )
+
 
 SIMON32 = SimonParameters(word_size=16)
+SIMON48 = SimonParameters(word_size=24)
 SIMON64 = SimonParameters(word_size=32)
+SIMON96 = SimonParameters(word_size=48)
+SIMON128 = SimonParameters(word_size=64)
 SIMECK32 = SimonParameters(
     word_size=16,
     and_rotations=(0, 5),
     xor_rotation=1,
+)
+SIMECK48 = SimonParameters(
+    word_size=24,
+    and_rotations=(0, 5),
+    xor_rotation=1,
+)
+SIMECK64 = SimonParameters(
+    word_size=32,
+    and_rotations=(0, 5),
+    xor_rotation=1,
+)
+SIMON102_32 = SimonParameters(
+    word_size=16,
+    and_rotations=(1, 0),
+    xor_rotation=2,
+)
+SIMON102_48 = SimonParameters(
+    word_size=24,
+    and_rotations=(1, 0),
+    xor_rotation=2,
+)
+SIMON102_64 = SimonParameters(
+    word_size=32,
+    and_rotations=(1, 0),
+    xor_rotation=2,
 )
 
 

@@ -8,6 +8,7 @@ from three_set_milp.search.bdpt_search import (
     SearchPart,
     StopReason,
     search_bdpt,
+    search_bdpt_exact,
     search_k_bdpt,
     search_k_bdpt_literal,
 )
@@ -87,6 +88,42 @@ def test_algorithm_2_returns_one_after_last_propagation() -> None:
 
     assert result.parity is Parity.ONE
     assert result.reason is StopReason.FINAL_ONE
+
+
+def test_corrected_algorithm_2_reads_zero_after_last_propagation() -> None:
+    initial = BDPTState(width=2, l=frozenset({0b01}))
+
+    def cancel_last_vector(state: BDPTState) -> BDPTState:
+        return BDPTState(width=2)
+
+    part = SearchPart(Boundary(0), cancel_last_vector)
+    result = search_bdpt_exact(
+        initial,
+        0,
+        [part],
+        lambda boundary, vector, target: True,
+    )
+
+    assert result.parity is Parity.ZERO
+    assert result.reason is StopReason.FINAL_ZERO
+
+
+def test_corrected_algorithm_2_reads_unknown_generated_by_last_part() -> None:
+    initial = BDPTState(width=2, l=frozenset({0b10}))
+
+    def generate_last_unknown(state: BDPTState) -> BDPTState:
+        return BDPTState(width=2, k=frozenset({0b01}), l=state.l)
+
+    part = SearchPart(Boundary(0), generate_last_unknown)
+    result = search_bdpt_exact(
+        initial,
+        0,
+        [part],
+        lambda boundary, vector, target: True,
+    )
+
+    assert result.parity is Parity.UNKNOWN
+    assert result.reason is StopReason.FINAL_UNKNOWN
 
 
 def test_k_bdpt_reproduces_followup_paper_example_2() -> None:

@@ -14,7 +14,10 @@ from three_set_milp.ciphers.rectangle import (
     shift_row,
     sub_column,
 )
-from three_set_milp.ciphers.spn import propagate_public_permutation
+from three_set_milp.ciphers.spn import (
+    propagate_known_key_and_permutation,
+    propagate_public_permutation,
+)
 from three_set_milp.core.bdpt import BDPTState
 from three_set_milp.core.bitvector import unit_vector
 from three_set_milp.milp.spn import SPNBoundary
@@ -133,6 +136,59 @@ def test_main_bdpt_key_treatment_switch_only_suppresses_rule4_k() -> None:
     assert paper_output.l == frozenset({0})
     assert diagnostic_output.k == frozenset()
     assert diagnostic_output.l == frozenset({0})
+
+
+def test_main_bdpt_fixed_round_key_tracks_known_translation() -> None:
+    input_state = BDPTState(width=64, l=frozenset({0}))
+    zero_key_parts = spn_search_parts(
+        PRESENT,
+        rounds=1,
+        key_treatment="fixed",
+        round_keys=(0,),
+    )
+    one_key_parts = spn_search_parts(
+        PRESENT,
+        rounds=1,
+        key_treatment="fixed",
+        round_keys=(1,),
+    )
+
+    assert len(zero_key_parts) == 17
+    assert len(one_key_parts) == 18
+    assert zero_key_parts[-1].propagate(input_state) == input_state
+    assert one_key_parts[-1].boundary == SPNBoundary(1, 0)
+    assert one_key_parts[-1].propagate(input_state).k == frozenset()
+    assert one_key_parts[-1].propagate(input_state).l == frozenset({0, 1})
+
+
+def test_split_fixed_key_matches_combined_public_translation() -> None:
+    input_state = BDPTState(width=64, l=frozenset({0, 1 << 9}))
+    round_key = 0b101
+    parts = spn_search_parts(
+        PRESENT,
+        rounds=1,
+        key_treatment="fixed",
+        round_keys=(round_key,),
+    )
+    split = input_state
+    for part in parts[-3:]:
+        split = part.propagate(split)
+
+    assert split == propagate_known_key_and_permutation(
+        input_state,
+        PRESENT,
+        round_key,
+    )
+
+
+def test_main_bdpt_fixed_round_keys_require_one_value_per_round() -> None:
+    with pytest.raises(ValueError, match="每一轮"):
+        spn_search_parts(
+            PRESENT,
+            rounds=2,
+            key_treatment="fixed",
+            round_keys=(0,),
+        )
 
 
 def test_main_bdpt_rejects_unknown_key_treatment() -> None:

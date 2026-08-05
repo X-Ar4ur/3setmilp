@@ -1,5 +1,6 @@
 """PRESENT/RECTANGLE 的 Algorithm 2 局部序列与 Gurobi oracle。"""
 
+from collections.abc import Sequence
 from functools import partial
 from typing import Literal
 
@@ -8,6 +9,7 @@ from three_set_milp.ciphers.spn import (
     propagate_key_and_permutation,
     propagate_public_permutation,
     propagate_sbox_part,
+    xor_known_constant,
 )
 from three_set_milp.core.propagation import xor_secret_key
 from three_set_milp.milp.gurobi_backend import SolveStatus
@@ -17,7 +19,7 @@ from .bdpt_search import SearchPart
 
 
 KeyBitOrder = Literal["ascending", "descending"]
-KeyTreatment = Literal["paper", "ignore-rule4"]
+KeyTreatment = Literal["paper", "ignore-rule4", "fixed"]
 
 
 def spn_search_parts(
@@ -25,19 +27,30 @@ def spn_search_parts(
     rounds: int,
     *,
     key_treatment: KeyTreatment = "paper",
+    round_keys: Sequence[int] | None = None,
 ) -> tuple[SearchPart, ...]:
     """按每轮全部 S 盒和轮末置换/密钥步骤生成局部序列。
 
-    ``ignore-rule4`` 仅用于定位论文 Table 5 差异，不属于主论文算法。
+    ``ignore-rule4`` 和 ``fixed`` 仅用于定位论文 Table 5 差异。
     """
     if rounds <= 0:
         raise ValueError("轮数必须为正数")
     if key_treatment == "paper":
-        round_end_propagate = propagate_key_and_permutation
+        if round_keys is not None:
+            raise ValueError("paper 密钥处理不能同时指定固定轮密钥")
     elif key_treatment == "ignore-rule4":
-        round_end_propagate = propagate_public_permutation
+        if round_keys is not None:
+            raise ValueError("ignore-rule4 不能同时指定固定轮密钥")
+    elif key_treatment == "fixed":
+        if round_keys is None or len(round_keys) != rounds:
+            raise ValueError("fixed 密钥处理必须为每一轮指定一个轮密钥")
+        if any(
+            key < 0 or key >= 1 << parameters.block_size
+            for key in round_keys
+        ):
+            raise ValueError("固定轮密钥超出密码分组宽度")
     else:
-        raise ValueError("密钥处理方式只能是 paper 或 ignore-rule4")
+        raise ValueError("密钥处理方式只能是 paper、ignore-rule4 或 fixed")
     parts: list[SearchPart] = []
     sbox_count = len(parameters.sbox_groups)
     for round_index in range(rounds):
@@ -52,15 +65,40 @@ def spn_search_parts(
                     ),
                 )
             )
-        parts.append(
-            SearchPart(
-                boundary=SPNBoundary(round_index, sbox_count),
-                propagate=partial(
-                    round_end_propagate,
-                    parameters=parameters,
-                ),
+        if key_treatment == "paper":
+            parts.append(
+                SearchPart(
+                    boundary=SPNBoundary(round_index, sbox_count),
+                    propagate=partial(
+                        propagate_key_and_permutation,
+                        parameters=parameters,
+                    ),
+                )
             )
-        )
+        else:
+            parts.append(
+                SearchPart(
+                    boundary=SPNBoundary(round_index, sbox_count),
+                    propagate=partial(
+                        propagate_public_permutation,
+                        parameters=parameters,
+                    ),
+                )
+            )
+        if key_treatment == "fixed":
+            assert round_keys is not None
+            next_boundary = SPNBoundary(round_index + 1, 0)
+            for key_index in range(parameters.block_size):
+                if (round_keys[round_index] >> key_index) & 1:
+                    parts.append(
+                        SearchPart(
+                            boundary=next_boundary,
+                            propagate=partial(
+                                xor_known_constant,
+                                index=key_index,
+                            ),
+                        )
+                    )
     return tuple(parts)
 
 
@@ -109,6 +147,7 @@ def spn_k_bdpt_parts(
                     boundary=next_boundary,
                     propagate=partial(xor_secret_key, index=key_index),
                     secret_key_index=key_index,
+                    secret_key_label=f"k^{round_index}_{key_index}",
                 )
             )
     return tuple(parts)

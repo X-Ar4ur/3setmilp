@@ -1,0 +1,14 @@
+{
+  "cipher": "speck32",
+  "rounds": 6,
+  "paper_rounds_with_extension": 7,
+  "group_size": 16,
+  "cases": [
+    {
+      "id": "constants_5_6",
+      "input_pattern": "aaaaaaaaaaaaaaaa,aaaaaaaaaccaaaaa",
+      "expected_output": "???????????????0,????????????????",
+      "expected_inaccuracy_key": "k^0_7"
+    }
+  ]
+}

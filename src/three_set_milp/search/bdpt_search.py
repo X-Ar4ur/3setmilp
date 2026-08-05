@@ -25,6 +25,7 @@ class SearchPart:
     boundary: Hashable
     propagate: Callable[[BDPTState], BDPTState]
     secret_key_index: int | None = None
+    secret_key_label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,7 @@ class TraceEntry:
     key_bypassed: bool | None = None
     decisive_vector: int | None = None
     secret_key_index: int | None = None
+    secret_key_label: str | None = None
     bypass_l_count: int | None = None
     bypass_parity: str | None = None
     bypass_reason: str | None = None
@@ -102,6 +104,27 @@ def search_bdpt(
         suffix_oracle,
         enable_key_bypass=False,
         check_final_state=False,
+    )
+
+
+def search_bdpt_exact(
+    initial_state: BDPTState,
+    target_index: int,
+    parts: Sequence[SearchPart],
+    suffix_oracle: SuffixOracle,
+) -> SearchResult:
+    """执行修正终态语义的主论文 Algorithm 2。"""
+    unit_vector(target_index, initial_state.width)
+    if not parts:
+        raise ValueError("BDPT 搜索至少需要一个局部函数")
+
+    return _search_bdpt(
+        initial_state,
+        target_index,
+        parts,
+        suffix_oracle,
+        enable_key_bypass=False,
+        check_final_state=True,
     )
 
 
@@ -213,6 +236,7 @@ def _search_bdpt(
                         l_after_propagation=None,
                         decisive_vector=vector,
                         secret_key_index=part.secret_key_index,
+                        secret_key_label=part.secret_key_label,
                     )
                 )
                 return SearchResult(
@@ -240,6 +264,7 @@ def _search_bdpt(
                     k_after_propagation=None,
                     l_after_propagation=None,
                     secret_key_index=part.secret_key_index,
+                    secret_key_label=part.secret_key_label,
                 )
             )
             return SearchResult(
@@ -260,6 +285,7 @@ def _search_bdpt(
         bypass_obstruction_vector: int | None = None
         bypass_obstruction_checked_key_index: int | None = None
         bypass_obstruction_generated_by_key_index: int | None = None
+        shifted_l: frozenset[int] = frozenset()
         if enable_key_bypass and part.secret_key_index is not None:
             bit_mask = unit_vector(part.secret_key_index, current.width)
             shifted_l = frozenset(
@@ -314,6 +340,7 @@ def _search_bdpt(
                 l_after_propagation=len(propagated.l),
                 key_bypassed=key_bypassed,
                 secret_key_index=part.secret_key_index,
+                secret_key_label=part.secret_key_label,
                 bypass_l_count=len(shifted_l)
                 if part.secret_key_index is not None and enable_key_bypass
                 else None,

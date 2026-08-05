@@ -1,5 +1,7 @@
 # 后续论文逐页审计、问题与解决方案
 
+> 2026-08-05 更新：本文档保留早期 K-BDPT/PRESENT/RECTANGLE 审计证据。SPECK、KATAN/KTANTAN、SIMON/SIMECK、SIMON(102) 的新增模型、表格配置、测试与服务器命令已经补入 [secret-key-paper-reproduction.md](secret-key-paper-reproduction.md)。
+
 本文档审计论文 *Exploring Secret Keys in Searching Integral Distinguishers Based on Division Property*（ToSC 2020, pp. 288--304）。目标是把后续论文的 K-BDPT 作为一条独立的复现路线，而不是把它当作主论文 Table 5 结果不符时的默认替代方案。
 
 ## 1. 阅读范围与逐页记录
@@ -143,7 +145,7 @@ python experiments/reproduce_table5_spn.py present60 \
 - 轮密钥顺序：两轮 PRESENT 部件序列分别固定验证 `0 -> 63` 与 `63 -> 0`，并验证首尾局部函数确实作用于对应密钥 bit。
 - 失败旁路来源：纯 Python 回归样例验证 `L'_i`、嵌套 BDPT 的阻塞边界、决定性 K 向量及其生成/检查密钥位会被准确记录。
 
-本地测试：`89 passed, 12 skipped`；跳过项均因本机没有 `gurobipy`。Gurobi 端到端结果仍需服务器验证。
+当前完整测试：`105 passed, 18 skipped`；跳过项均因本机没有 `gurobipy`。Gurobi 端到端结果仍需服务器验证。
 
 ## 5. 下一次服务器实验顺序
 

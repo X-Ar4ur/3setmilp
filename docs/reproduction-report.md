@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-更新时间：2026-07-27
+更新时间：2026-08-05
 
-当前实现已经完成分组密码侧的数学内核、Algorithm 1/2 框架、SIMON、PRESENT、RECTANGLE、LBlock 模型和 Tables 3--6 服务器实验入口。由于本机 Gurobi License 已过期，尚未声称论文任一端到端表格已经复现成功。
+当前实现已经完成主论文及后续论文的数学内核、Algorithm 1/2、K-BDPT 密钥旁路、SIMON/SIMECK/SIMON(102)、SPECK、KATAN/KTANTAN、PRESENT、RECTANGLE 和 LBlock 模型，并提供两篇论文各表格的服务器实验入口。主论文 Table 3 已有服务器结果；其余端到端表格尚未在当前代码版本和可用 Gurobi 环境中验收，因此不把“实现完成”写成“实验复现成功”。后续论文的完整映射见 [secret-key-paper-reproduction.md](secret-key-paper-reproduction.md)。
 
 ## 已通过的独立验证
 
@@ -20,6 +20,12 @@
 | 主论文 \(Q_{1,15}\) | 通过 | 三路传播及重复向量奇偶抵消 |
 | 主论文 \(Q_{1,16}\) | 通过 | 密钥异或、Reduce1 和左右交换后的 \(K/L\) |
 | Algorithm 2 停止规则 | 通过 | 独立 mock suffix oracle 单元测试 |
+| K-BDPT/Theorem 3 | 通过 | 后续论文 Example 2、旁路与字面末行歧义测试 |
+| SPECK 精确轮电路 | 通过 | 小字长具体多重集及未知常量 cube 的全部真实状态单项式 |
+| KATAN/KTANTAN 精确时钟电路 | 通过 | 原位反馈电路、具体多重集及未知常量 cube 的全部单项式 |
+| SIMON/SIMECK/SIMON(102) 参数 | 通过 | 旋转常数、位序、标量轮密钥序列与 Table 5 配置 |
+| 后续论文 Tables 2/3/5 配置 | 通过 | 输入/输出长度、论文 layout、73.6 轮换算和密钥标签 |
+| SPECK/KATAN 后缀 MILP | 待服务器 | 已提供精确 BDPT 交叉测试 |
 | SIMON 紧凑 L1--L4 方程 | 通过 | 稀疏分支枚举与局部精确传播比较，含部分轮 |
 | Gurobi 基本模型 | 待服务器 | 本机无可用 License |
 | SIMON 紧凑一轮模型 | 待服务器 | 已提供精确 BDPT 交叉测试 |
@@ -39,17 +45,17 @@
 当前本地测试为：
 
 ```text
-76 passed, 12 skipped
+113 passed, 18 skipped
 ```
 
-12 个跳过项全部位于 `tests/milp/`，原因是当前 Python 环境没有可用的 `gurobipy`。它们不是算法失败，也不能算作通过。
+18 个跳过项全部位于 `tests/milp/`，原因是当前隔离 Python 环境没有 `gurobipy`。它们不是算法失败，也不能算作通过。
 
 ## 本地 Gurobi 环境
 
-- Gurobi Optimizer：12.0.2；
-- 对应 `gurobipy`：12.0.2，位于 Gurobi 自带 Python 3.11 环境；
-- License 到期日：2026-06-10；
-- 当前日期：2026-07-26。
+- 本次测试所用隔离 Python：未安装 `gurobipy`；
+- 此前发现的本机 Gurobi Optimizer / `gurobipy`：12.0.2；
+- 此前 License 到期日：2026-06-10；
+- 当前日期：2026-08-05。
 
 创建模型时 Gurobi 明确返回 `License expired 2026-06-10`。实现将该错误映射为异常，不会映射为 `INFEASIBLE`。
 
@@ -85,6 +91,10 @@ PRESENT 原始规范明确规定 bit 0 位于分组最右侧，状态写为 \(b_
 正确布局下，主论文 Algorithm 2 对目标 0 返回 zero，但目标 4、8、12 在轮密钥 Rule 4 产生 K 后返回 unknown，与 Table 5 不符。早期 K-BDPT 对目标 4 的服务器实验同样返回 unknown，耗时约 845 秒、调用 oracle 7276 次；该 JSON 没有记录每次旁路的内部停止原因，且生成时尚未完成后续论文 Algorithm 1 的终态歧义审计，因此不能作为后续论文的最终复现结论。
 
 现已逐页检查主论文的全部 30 页，并把 Algorithm 2、PRESENT 的 17 部件轮划分、S 盒定理和停止规则逐项映射到实现。发现并修正了一处确定偏差：主论文第 412 页 Algorithm 2 第 22 行规定遍历全部部件后返回 one，主论文模式现严格遵守该终点规则。这不影响目标 4 在第二轮提前触发的 Stopping Rule 1。
+
+进一步审计确认，第 22 行无条件返回 one 本身并不覆盖末端 `L` 抵消或最后一个局部函数生成 `K` 的情形。项目保留字面 `bdpt` 作为论文基线，并新增 `bdpt-exact` 读取最终 BDPT 三值；两者具有不同算法版本和检查点身份。该修正仍不影响 PRESENT60 目标 4 的第二轮提前停止。
+
+Table 5 入口现支持逐轮固定密钥的公开仿射传播，并新增分阶段隐藏语义矩阵：先比较正文 Rule 4、零轮密钥、`c=0000` 和 `c=1111`，再按需枚举全部 16 种输入常量或三类重复固定轮密钥。矩阵只运行 PRESENT60 目标 4 与 RECTANGLE60 目标 10、12，并为每个配置建立独立检查点。当前本机没有 `gurobipy`，因此只完成命令生成、身份隔离和离线传播测试，尚未产生新的服务器求解结论。
 
 为判断该提前停止究竟来自实现错误还是论文方法本身，Table 5 脚本新增 `--record-witness`：它会导出决定性 K 向量到目标单位向量的完整 CBDP trail，并使用独立代码逐个检查 47 条 PRESENT S 盒合法 transition 和位排列。只有该证据完成核验后，才会决定是否需要参考后续工作。详细审计见 `docs/main-paper-audit.md`。
 

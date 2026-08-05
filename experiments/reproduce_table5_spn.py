@@ -1,6 +1,7 @@
 """逐输出位复现论文 Table 5 的 PRESENT/RECTANGLE 结果。"""
 
 import argparse
+import hashlib
 import json
 import platform
 import sys
@@ -40,6 +41,7 @@ from three_set_milp.search.bdpt_search import (
     SearchResult,
     StopReason,
     search_bdpt,
+    search_bdpt_exact,
     search_k_bdpt,
     search_k_bdpt_literal,
 )
@@ -58,6 +60,7 @@ PAPER_LAYOUTS = {
 EXPERIMENTS = ("present60", "present63", "rectangle60")
 ALGORITHM_VERSIONS = {
     "bdpt": None,
+    "bdpt-exact": "main_algorithm2_exact_terminal_v1",
     "k-bdpt": "followup_algorithm1_example_semantics_v5",
     "k-bdpt-literal": "followup_algorithm1_literal_v2",
 }
@@ -66,7 +69,17 @@ KEY_TREATMENT_NOTES = {
     "ignore-rule4": (
         "诊断偏离：轮密钥处不执行 Rule 4 的 L 到 K 生成，仅传播公开置换"
     ),
+    "fixed": "诊断偏离：传播取值已知的逐轮固定密钥",
 }
+MAIN_BDPT_ALGORITHMS = frozenset({"bdpt", "bdpt-exact"})
+
+
+def parse_round_key(value: str) -> int:
+    """解析带 ``0x`` 前缀的十六进制或普通十进制轮密钥。"""
+    try:
+        return int(value, 0)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(f"无效轮密钥：{value}") from error
 
 
 def parse_args() -> argparse.Namespace:
@@ -93,11 +106,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--algorithm",
-        choices=("bdpt", "k-bdpt", "k-bdpt-literal"),
+        choices=("bdpt", "bdpt-exact", "k-bdpt", "k-bdpt-literal"),
         default="bdpt",
         help=(
-            "主论文 Algorithm 2、按 Example 2 补齐终态语义的 K-BDPT，"
-            "或字面伪代码 K-BDPT 诊断模式"
+            "主论文 Algorithm 2、修正终态的主论文模式、按 Example 2 "
+            "补齐终态语义的 K-BDPT，或字面伪代码 K-BDPT 诊断模式"
         ),
     )
     parser.add_argument(
@@ -110,11 +123,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--key-treatment",
-        choices=("paper", "ignore-rule4"),
+        choices=("paper", "ignore-rule4", "fixed"),
         default="paper",
         help=(
-            "主论文 Rule 4 密钥处理，或忽略 L 到 K 生成的对照诊断；"
-            "后者不属于论文算法且仅适用于 --algorithm bdpt"
+            "主论文 Rule 4、忽略 L 到 K 生成，或传播取值已知的轮密钥；"
+            "后两者仅适用于主论文 BDPT 模式"
+        ),
+    )
+    parser.add_argument(
+        "--round-keys",
+        type=parse_round_key,
+        nargs="+",
+        default=None,
+        help=(
+            "--key-treatment fixed 使用的逐轮密钥；每轮一个 64-bit 值，"
+            "十六进制值必须带 0x 前缀"
         ),
     )
     parser.add_argument(
@@ -143,6 +166,7 @@ def initial_payload(
     constant_semantics: dict[str, str],
     key_bit_order: str | None,
     key_treatment: str | None,
+    round_keys: tuple[int, ...] | None,
 ) -> dict[str, Any]:
     import gurobipy as gp
 
@@ -157,6 +181,11 @@ def initial_payload(
         "key_treatment_note": (
             KEY_TREATMENT_NOTES[key_treatment]
             if key_treatment is not None
+            else None
+        ),
+        "round_keys": (
+            [f"0x{key:016x}" for key in round_keys]
+            if round_keys is not None
             else None
         ),
         "environment": {
@@ -199,7 +228,10 @@ def has_recorded_witness(result: dict[str, Any], algorithm: str) -> bool:
     """判断续跑时是否已保存当前算法所需的审计证据。"""
     if "decisive_cbdp_witness" not in result:
         return False
-    return algorithm == "bdpt" or "bypass_obstruction_witnesses" in result
+    return (
+        algorithm in MAIN_BDPT_ALGORITHMS
+        or "bypass_obstruction_witnesses" in result
+    )
 
 
 def write_checkpoint(path: Path, payload: dict[str, Any]) -> None:
@@ -347,17 +379,30 @@ def build_bypass_obstruction_witnesses(
 
 def main() -> int:
     args = parse_args()
-    if args.algorithm == "bdpt" and args.key_bit_order != "ascending":
+    is_main_bdpt = args.algorithm in MAIN_BDPT_ALGORITHMS
+    if is_main_bdpt and args.key_bit_order != "ascending":
         raise ValueError("--key-bit-order 只适用于 K-BDPT 模式")
-    if args.algorithm != "bdpt" and args.key_treatment != "paper":
-        raise ValueError("--key-treatment ignore-rule4 只适用于主论文 BDPT 模式")
+    if not is_main_bdpt and args.key_treatment != "paper":
+        raise ValueError("非 paper 密钥处理只适用于主论文 BDPT 模式")
+    if args.key_treatment == "fixed":
+        if args.round_keys is None:
+            raise ValueError("--key-treatment fixed 必须同时指定 --round-keys")
+    elif args.round_keys is not None:
+        raise ValueError("--round-keys 只能与 --key-treatment fixed 同时使用")
     key_bit_order = (
-        args.key_bit_order if args.algorithm != "bdpt" else None
+        args.key_bit_order if not is_main_bdpt else None
     )
-    key_treatment = args.key_treatment if args.algorithm == "bdpt" else None
+    key_treatment = args.key_treatment if is_main_bdpt else None
     config = load_config(args.experiment)
     parameters = PARAMETERS[str(config["cipher"])]
     rounds = int(config["rounds"])
+    round_keys = (
+        tuple(args.round_keys)
+        if args.key_treatment == "fixed" and is_main_bdpt
+        else None
+    )
+    if round_keys is not None and len(round_keys) != rounds:
+        raise ValueError(f"当前实验需要恰好 {rounds} 个轮密钥")
     layout = PAPER_LAYOUTS[str(config["cipher"])]
     active = active_indices_from_layout_pattern(
         str(config["input_pattern"]),
@@ -391,6 +436,14 @@ def main() -> int:
         algorithm_suffix += f"_key_{key_bit_order}"
     if key_treatment == "ignore-rule4":
         algorithm_suffix += "_bdpt_ignore_rule4"
+    elif key_treatment == "fixed":
+        assert round_keys is not None
+        fingerprint = hashlib.sha256(
+            ",".join(f"{key:016x}" for key in round_keys).encode("ascii")
+        ).hexdigest()[:12]
+        algorithm_suffix += f"_fixed_{fingerprint}"
+    if args.constant_values is not None:
+        algorithm_suffix += f"_constants_{normalized_values}"
     output = args.output or Path(
         f"output/results/table5_{args.experiment}{algorithm_suffix}.json"
     )
@@ -411,6 +464,13 @@ def main() -> int:
         legacy_key_treatment = "paper" if args.algorithm == "bdpt" else None
         if payload.get("key_treatment", legacy_key_treatment) != key_treatment:
             raise ValueError("已有检查点的轮密钥处理方式与当前命令不一致")
+        expected_round_keys = (
+            [f"0x{key:016x}" for key in round_keys]
+            if round_keys is not None
+            else None
+        )
+        if payload.get("round_keys") != expected_round_keys:
+            raise ValueError("已有检查点的固定轮密钥与当前命令不一致")
         if payload.get("config") != config:
             raise ValueError(
                 "已有检查点由旧配置生成，请移动旧文件或使用新的 --output 路径"
@@ -424,6 +484,7 @@ def main() -> int:
             constant_semantics,
             key_bit_order,
             key_treatment,
+            round_keys,
         )
 
     targets = (
@@ -453,8 +514,13 @@ def main() -> int:
             parameters,
             rounds,
             key_treatment=args.key_treatment,
+            round_keys=round_keys,
         )
-        search = search_bdpt
+        search = (
+            search_bdpt_exact
+            if args.algorithm == "bdpt-exact"
+            else search_bdpt
+        )
 
     for target_index in targets:
         key = str(target_index)
@@ -479,7 +545,7 @@ def main() -> int:
         write_checkpoint(output, payload)
         print(f"开始目标位 {target_index}，正在执行首个后缀查询……", flush=True)
         started = time.perf_counter()
-        if args.algorithm == "bdpt":
+        if is_main_bdpt:
             result = search(initial_state, target_index, parts, oracle)
         else:
             result = search(
@@ -508,7 +574,7 @@ def main() -> int:
                     output_flag=args.gurobi_log,
                 )
             )
-            if args.algorithm != "bdpt":
+            if not is_main_bdpt:
                 payload["results"][key]["bypass_obstruction_witnesses"] = (
                     build_bypass_obstruction_witnesses(
                         parameters,
